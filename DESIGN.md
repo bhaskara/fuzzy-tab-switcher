@@ -57,6 +57,13 @@ were held back.
 | Bookmark | navigate the active tab to its URL | open it in a new tab here | open it in a new tab over there |
 | Recently closed tab | restore, then bring it here | restore, then follow it | restore, then send it over there |
 
+There is one exception to the table: a tab that is *already* in the current
+window is only focused, never moved. Moving it would drag it across to sit beside the active
+tab, silently rearranging a window the user can see, to no benefit.
+
+No path reloads an existing tab: `chrome.tabs.move` between two normal windows
+preserves the renderer, exactly as dragging the tab does.
+
 **`Ctrl+Enter` never moves window focus**, which is its whole purpose: with two
 windows side by side, it puts something into the other one while the user goes
 on working in this one. That rests on Chrome documenting `active` on both
@@ -71,13 +78,6 @@ tab outside the current one. With two windows side by side that is simply the
 other one. With only one window open, activation reports `No other window` and
 the popup stays open rather than guessing.
 
-with one exception: a tab that is *already* in the current window is only
-focused, never moved. Moving it would drag it across to sit beside the active
-tab, silently rearranging a window the user can see, to no benefit.
-
-Neither path reloads an existing tab: `chrome.tabs.move` between two normal
-windows preserves the renderer, exactly as dragging the tab does.
-
 **Keys.** `Down`/`Up` and `Ctrl-N`/`Ctrl-P` move the selection, wrapping at both
 ends; `Enter`, `Shift+Enter` and `Ctrl+Enter` activate as above; `Escape`
 closes. Clicking a row activates it, honouring the same modifiers. Shift wins
@@ -89,13 +89,18 @@ so the truth table stays free of input concerns and rebinding is a one-file
 change. An unrecognized intent falls back to `here`, since refusing to switch
 tabs is a worse failure than switching them the ordinary way.
 
-**Restoring is two steps.** `chrome.sessions.restore` reopens a tab with its
-back and forward history intact — the whole advantage over loading the same URL
-fresh — but Chrome decides which window it lands in, and that is not knowable
-until it has. So `plan` returns a bare `restoreSession` action, the popup
-performs it, and then plans a *second* action against the reopened tab, at which
-point the open-tab row above applies unchanged. A restored tab therefore behaves
-exactly like any other tab without `plan` having to predict where it will be.
+**Restoring is two steps, and happens in the service worker.**
+`chrome.sessions.restore` reopens a tab with its back and forward history intact
+— the whole advantage over loading the same URL fresh — but Chrome decides which
+window it lands in, and that is not knowable until it has. So `plan` returns a
+bare `restoreSession` action, and whoever performs it then plans a *second*
+action against the reopened tab, at which point the open-tab row above applies
+unchanged. A restored tab therefore behaves exactly like any other tab without
+`plan` having to predict where it will be.
+
+Both halves run in `background.js`, not in the popup: restoring focuses the
+window the tab lands in, which closes the popup and destroyed the second half
+along with it. See §4.
 
 **Deduplication.** Items pointing at the same page collapse to the one that
 preserves the most state: an open tab beats a recently closed one, which beats a
@@ -140,6 +145,15 @@ not a change spread across the UI.
   not run on `chrome://` pages, the PDF viewer, the Web Store, or other
   extensions' pages — precisely where a tab switcher gets invoked. We accept the
   toolbar popup. Maximum popup size is 800x600.
+- **The popup cannot do work after moving window focus.** Losing focus is what
+  closes the popup, and closing it destroys the JavaScript context mid-sequence,
+  silently: no error, no log, since the console dies with the page. Most actions
+  either leave focus alone or move it as their last step, so this never showed.
+  `chrome.sessions.restore` is the exception — it reopens the tab *and* focuses
+  whichever window it lands in, and only then can the tab be placed where the
+  user asked, so the placement half never ran. That work is now done in the
+  service worker, which outlives the popup. Anything else that needs to act
+  after a focus change belongs there too.
 - **`chrome://` pages.** Per the project decision, we do not special-case them.
   Bookmark activation navigates the active tab even when that tab is a
   `chrome://` page; if Chrome refuses, the error surfaces rather than being
@@ -166,6 +180,8 @@ with no browser.
 ```
 src/                 <- Chrome loads this directory unpacked; there is no build step
   manifest.json
+  background.js      service worker: the work that must outlive the popup
+  messages.js        the popup/worker contract, imported by both
   core/              pure, no chrome.* — the whole test surface
     items.js         the SearchItem model + normalization from raw API shapes
     fuzzy.js         score / positions, in prepared and convenience forms
@@ -179,6 +195,7 @@ src/                 <- Chrome loads this directory unpacked; there is no build 
     index.html
     popup.css
     main.js          wiring: read -> rank on keystroke -> render -> plan -> exec
+                     (restores are handed to background.js instead)
 tests/               vitest; imports src/core/* directly
 bench/               timings for the ranking path; npm run bench
 ```

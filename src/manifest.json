@@ -9,6 +9,10 @@
     "sessions",
     "favicon"
   ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "action": {
     "default_popup": "popup/index.html",
     "default_title": "Switch to tab or bookmark"

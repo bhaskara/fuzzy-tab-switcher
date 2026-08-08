@@ -7,7 +7,7 @@ import { execute } from '../adapters/exec.js';
 import { readAll, readBrowserState } from '../adapters/source.js';
 import { positions } from '../core/fuzzy.js';
 import { toSegments } from '../core/highlight.js';
-import { KIND_CLOSED_TAB, KIND_TAB, tabToItem } from '../core/items.js';
+import { KIND_CLOSED_TAB, KIND_TAB } from '../core/items.js';
 import {
   INTENT_HERE,
   INTENT_IN_PLACE,
@@ -16,6 +16,7 @@ import {
   plan,
 } from '../core/plan.js';
 import { buildIndex, rank } from '../core/rank.js';
+import { RESTORE_AND_PLACE } from '../messages.js';
 import { mark, report } from './timing.js';
 
 mark('modules');
@@ -259,32 +260,27 @@ async function activate(intent) {
     return;
   }
 
+  if (action.type === 'restoreSession') {
+    // Restoring focuses the window the tab lands in, which closes this popup
+    // and destroys the context before the tab can be placed. The service worker
+    // is not tied to the popup's lifetime, so it does both halves. Deliberately
+    // not awaited: there will be no popup left to receive the answer.
+    chrome.runtime
+      .sendMessage({
+        type: RESTORE_AND_PLACE,
+        sessionId: action.sessionId,
+        intent,
+        browserState,
+      })
+      .catch(() => {
+        // Expected: the channel closes along with the popup.
+      });
+    window.close();
+    return;
+  }
+
   try {
-    const restored = await execute(action);
-    // Restoring a closed tab only reopens it; Chrome decides which window it
-    // lands in, and that is not knowable until it has. Planning a second action
-    // against the reopened tab is what makes a restored tab behave like any
-    // other tab under every intent.
-    if (restored === null && action.type === 'restoreSession') {
-      // The tab is back, but Chrome told us nothing we can place it with, so
-      // it stayed wherever Chrome put it. Say so rather than closing as though
-      // the requested placement had happened.
-      setStatus('Restored, but Chrome reported no tab to place — see popup console');
-      return;
-    }
-    if (restored !== null) {
-      // The follow-up can refuse just as the first plan can — restoring a
-      // closed tab with no other window to send it to, for one — and exec has
-      // no case for that.
-      const followUp = plan(tabToItem(restored), intent, browserState);
-      console.log('[tab-switcher] restored tab', JSON.stringify(restored));
-      console.log('[tab-switcher] follow-up action', JSON.stringify(followUp));
-      if (followUp.type === 'reportProblem') {
-        setStatus(followUp.message);
-        return;
-      }
-      await execute(followUp);
-    }
+    await execute(action);
   } catch (err) {
     // Chrome refuses some moves — across the incognito boundary, for instance.
     // Say so and stay open rather than closing as though it had worked.

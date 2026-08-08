@@ -11,11 +11,14 @@ only, and never ship.
 
 | Path | Contents |
 | --- | --- |
-| `manifest.json` | MV3 manifest: permissions, the popup action, and the `_execute_action` shortcut. |
+| `manifest.json` | MV3 manifest: permissions, the service worker, the popup action, and the `_execute_action` shortcut. |
+| `background.js` | Service worker. Holds only the work that must outlive the popup — see [../DESIGN.md](../DESIGN.md) §4. |
+| `messages.js` | The contract between the popup and the worker, imported by both so neither imports the other. |
 | `core/` | Pure logic — no `chrome.*`, no DOM. The whole unit-test surface. |
 | `adapters/` | The only modules that call `chrome.*`. |
 | `popup/` | The popup UI: markup, styles, and the wiring between core and adapters. |
 
-The layering rule is one-directional: `popup/` may import from `adapters/` and
-`core/`, `adapters/` may import from `core/`, and `core/` imports nothing. See
-[../DESIGN.md](../DESIGN.md) §5 for why.
+The layering rule is one-directional: `popup/` and `background.js` may import
+from `adapters/` and `core/`, `adapters/` may import from `core/`, and `core/`
+imports nothing. The popup and the worker never import each other — they share
+only `messages.js`. See [../DESIGN.md](../DESIGN.md) §5 for why.
