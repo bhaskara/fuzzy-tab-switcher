@@ -17,6 +17,7 @@ only, and never ship.
 | `core/` | Pure logic — no `chrome.*`, no DOM. The whole unit-test surface. |
 | `adapters/` | The only modules that call `chrome.*`. |
 | `popup/` | The popup UI: markup, styles, and the wiring between core and adapters. |
+| `options/` | The options page: which sources to search, and how much history. |
 
 The layering rule is one-directional: `popup/` and `background.js` may import
 from `adapters/` and `core/`, `adapters/` may import from `core/`, and `core/`

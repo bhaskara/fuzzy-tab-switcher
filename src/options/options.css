@@ -1,0 +1,90 @@
+/* Options page. Chrome embeds this in chrome://extensions, so it inherits that
+   page's width and sits on its background.
+
+   The colour tokens are duplicated from popup/popup.css rather than shared via
+   an @import: a stylesheet import is an extra render-blocking fetch, and the
+   popup's open latency is the one thing in this extension worth protecting from
+   a few lines of duplication. See ../../DESIGN.md §6. */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #ffffff;
+  --fg: #1f1f1f;
+  --fg-dim: #5f6368;
+  --border: #dadce0;
+  --error-fg: #c5221f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #292a2d;
+    --fg: #e8eaed;
+    --fg-dim: #9aa0a6;
+    --border: #3c4043;
+    --error-fg: #f28b82;
+  }
+}
+
+body {
+  min-width: 380px;
+  margin: 0;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 system-ui, sans-serif;
+}
+
+fieldset {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+label {
+  display: block;
+  margin: 4px 0;
+}
+
+.field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+input[type='number'] {
+  width: 7em;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+
+.hint-warn {
+  color: var(--error-fg);
+}
+
+.status {
+  margin: 0;
+  min-height: 1.5em;
+  color: var(--fg-dim);
+}
+
+.status-error {
+  color: var(--error-fg);
+}

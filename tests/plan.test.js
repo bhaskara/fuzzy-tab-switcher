@@ -186,7 +186,8 @@ describe('plan in general', () => {
   });
 
   it('rejects an unknown kind rather than silently doing nothing', () => {
-    const alien = { kind: 'history', url: 'https://example.com/' };
+    // A kind that does not exist, standing in for a source added later.
+    const alien = { kind: 'downloads', url: 'https://example.com/' };
     expect(() => plan(alien, INTENT_HERE, STATE)).toThrow(TypeError);
   });
 

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fuzzy Tab Switcher options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <form id="settings">
+      <fieldset>
+        <legend>Search these</legend>
+        <label><input type="checkbox" name="tabs" /> Open tabs</label>
+        <label><input type="checkbox" name="bookmarks" /> Bookmarks</label>
+        <label><input type="checkbox" name="closed" /> Recently closed tabs</label>
+        <label><input type="checkbox" name="history" /> History</label>
+        <p class="hint">
+          A source that is switched off is not read at all, so turning one off
+          also makes the popup open faster.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>History</legend>
+        <label class="field">
+          How many history entries to load
+          <input type="number" id="historyLimit" name="historyLimit" min="0" step="100" />
+        </label>
+        <p class="hint" id="historyHint"></p>
+      </fieldset>
+    </form>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

@@ -2,7 +2,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { bookmarkToItem, closedTabToItem, tabToItem } from '../src/core/items.js';
+import {
+  bookmarkToItem,
+  closedTabToItem,
+  historyToItem,
+  tabToItem,
+} from '../src/core/items.js';
 import { buildIndex, rank } from '../src/core/rank.js';
 
 /** A tab item, from a few readable fields. */
@@ -18,6 +23,11 @@ function bookmark({ id = 'b1', title = 'Bookmark', url = 'https://example.org/',
 /** A recently closed tab item. */
 function closed({ id = 's1', title = 'Closed', url = 'https://example.net/', lastModified = 0 } = {}) {
   return closedTabToItem({ lastModified, tab: { sessionId: id, title, url } });
+}
+
+/** A history item. */
+function history({ id = 'h1', title = 'History', url = 'https://example.dev/', lastVisitTime = 0 } = {}) {
+  return historyToItem({ id, title, url, lastVisitTime });
 }
 
 /** Build an index and rank in one step, as the popup does across two phases. */
@@ -131,15 +141,15 @@ describe('rank tiers', () => {
 
   it('places a source added later in the lower tier without being told to', () => {
     const alien = {
-      kind: 'history',
-      key: 'history:1',
-      title: 'history hit',
+      kind: 'downloads',
+      key: 'downloads:1',
+      title: 'download hit',
       url: 'https://h.test/',
       display: 'h.test',
       lastUsed: 9_999_999_999,
     };
     const items = [alien, tab({ id: 1, title: 'open', lastAccessed: 1 })];
-    expect(rankedTitles(items, '')).toEqual(['open', 'history hit']);
+    expect(rankedTitles(items, '')).toEqual(['open', 'download hit']);
   });
 
   it('still ranks by match quality within the open tier', () => {
@@ -182,6 +192,27 @@ describe('rank deduplication', () => {
       bookmark({ id: 'b1', title: 'Bookmarked', url: 'https://example.com/x' }),
     ];
     expect(rankedTitles(items, '')).toHaveLength(2);
+  });
+
+  it('drops a history entry for a page that is open, closed or bookmarked', () => {
+    // A history entry is a bare URL — it preserves the least of the four, so it
+    // loses every duplicate.
+    for (const better of [
+      tab({ id: 1, title: 'Open', url: 'https://dup.test/' }),
+      closed({ id: 's1', title: 'Closed', url: 'https://dup.test/' }),
+      bookmark({ id: 'b1', title: 'Bookmarked', url: 'https://dup.test/' }),
+    ]) {
+      const items = [history({ id: 'h1', title: 'Visited', url: 'https://dup.test/' }), better];
+      expect(rankedTitles(items, '')).toEqual([better.title]);
+    }
+  });
+
+  it('keeps a history entry for a page found nowhere else', () => {
+    const items = [
+      tab({ id: 1, title: 'Open', url: 'https://a.test/' }),
+      history({ id: 'h1', title: 'Only in history', url: 'https://b.test/' }),
+    ];
+    expect(rankedTitles(items, '')).toEqual(['Open', 'Only in history']);
   });
 
   it('keeps two tabs showing the same page, since both can be switched to', () => {
@@ -231,7 +262,7 @@ describe('rank deduplication', () => {
     // A source added without being listed in KIND_PRECEDENCE must not silently
     // outrank everything; it sorts last, so the open tab still wins.
     const url = 'https://example.com/same';
-    const alien = { kind: 'history', key: 'history:1', title: 'History', url, display: url, lastUsed: 0 };
+    const alien = { kind: 'downloads', key: 'downloads:1', title: 'Download', url, display: url, lastUsed: 0 };
     expect(rankedTitles([alien, tab({ id: 1, title: 'Open', url })], '')).toEqual(['Open']);
   });
 });

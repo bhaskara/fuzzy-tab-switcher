@@ -2,11 +2,13 @@
   "manifest_version": 3,
   "name": "Fuzzy Tab Switcher",
   "version": "0.1.0",
-  "description": "Jump to an open tab or bookmark by fuzzy keyboard search.",
+  "description": "Jump to an open tab, bookmark, recently closed tab or history entry by fuzzy keyboard search.",
   "permissions": [
     "tabs",
     "bookmarks",
     "sessions",
+    "history",
+    "storage",
     "favicon"
   ],
   "background": {
@@ -16,6 +18,10 @@
   "action": {
     "default_popup": "popup/index.html",
     "default_title": "Switch to tab or bookmark"
+  },
+  "options_ui": {
+    "page": "options/index.html",
+    "open_in_tab": false
   },
   "commands": {
     "_execute_action": {

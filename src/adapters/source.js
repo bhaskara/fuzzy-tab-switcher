@@ -2,7 +2,12 @@
 // SearchItems. This module and its sibling exec.js are the only places in the
 // extension that touch chrome.*, which is what keeps src/core pure.
 
-import { closedTabToItem, flattenBookmarks, tabToItem } from '../core/items.js';
+import {
+  closedTabToItem,
+  flattenBookmarks,
+  historyToItem,
+  tabToItem,
+} from '../core/items.js';
 
 /**
  * Read every open tab, across all normal windows, as search items.
@@ -64,6 +69,36 @@ export async function readRecentlyClosed() {
 }
 
 /**
+ * Read the most recent history entries as search items.
+ *
+ * Bounded deliberately. Ranking is linear in the number of candidates, and a
+ * real browsing history runs to hundreds of thousands of entries — at 100,000
+ * the popup would take some 700ms to open and 100ms per keystroke. See
+ * ../../bench/README.md.
+ *
+ * @param {number} maxResults How many entries to load. 0 reads nothing.
+ * @returns {Promise<import('../core/items.js').HistoryItem[]>} Entries without
+ *   a URL are dropped: they cannot be opened.
+ *
+ * Preconditions
+ * -------------
+ * The `"history"` permission must be granted, otherwise this rejects.
+ *
+ * Notes
+ * -----
+ * `startTime` must be passed explicitly. Omitted, `chrome.history.search`
+ * defaults it to 24 hours ago, which would silently reduce the whole feature to
+ * "pages visited today". Chrome does not document what order results come back
+ * in, so which entries survive the `maxResults` cut is not guaranteed to be the
+ * most recent; ranking sorts by `lastVisitTime` regardless.
+ */
+export async function readHistory(maxResults) {
+  if (maxResults <= 0) return [];
+  const entries = await chrome.history.search({ text: '', startTime: 0, maxResults });
+  return entries.filter((entry) => typeof entry.url === 'string').map(historyToItem);
+}
+
+/**
  * Read what `core/plan.js` needs to know about the browser.
  *
  * `currentWindow` resolves to the window the popup is anchored to, which is the
@@ -95,15 +130,20 @@ export async function readBrowserState() {
  * Sources are read concurrently, since the popup cannot show anything until
  * all of them have answered.
  *
+ * @param {import('../core/settings.js').Settings} settings Which sources to
+ *   read, and how much history. A disabled source is not read at all rather
+ *   than read and filtered, so turning one off actually saves its cost.
  * @returns {Promise<import('../core/items.js').SearchItem[]>} Tabs, then
- *   recently closed tabs, then bookmarks — unranked and not yet deduplicated
- *   against each other, which `buildIndex` does.
+ *   recently closed tabs, then bookmarks, then history — unranked and not yet
+ *   deduplicated against each other, which `buildIndex` does.
  */
-export async function readAll() {
-  const [tabs, closed, bookmarks] = await Promise.all([
-    readTabs(),
-    readRecentlyClosed(),
-    readBookmarks(),
+export async function readAll(settings) {
+  const { sources } = settings;
+  const [tabs, closed, bookmarks, history] = await Promise.all([
+    sources.tabs ? readTabs() : [],
+    sources.closed ? readRecentlyClosed() : [],
+    sources.bookmarks ? readBookmarks() : [],
+    sources.history ? readHistory(settings.historyLimit) : [],
   ]);
-  return [...tabs, ...closed, ...bookmarks];
+  return [...tabs, ...closed, ...bookmarks, ...history];
 }

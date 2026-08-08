@@ -5,12 +5,14 @@ import { describe, expect, it } from 'vitest';
 import {
   KIND_BOOKMARK,
   KIND_CLOSED_TAB,
+  KIND_HISTORY,
   KIND_TAB,
   bookmarkToItem,
   byRecencyDesc,
   closedTabToItem,
   displayUrl,
   flattenBookmarks,
+  historyToItem,
   tabToItem,
 } from '../src/core/items.js';
 
@@ -190,6 +192,63 @@ describe('closedTabToItem', () => {
     expect(() => closedTabToItem({ lastModified: 1, tab: { url: 'https://x.test/' } })).toThrow(
       TypeError,
     );
+  });
+});
+
+describe('historyToItem', () => {
+  /** A `chrome.history.HistoryItem`, as Chrome shapes it. */
+  function entry(overrides = {}) {
+    return {
+      id: 'h9',
+      title: 'Visited page',
+      url: 'https://example.com/page',
+      lastVisitTime: 1_700_000_000_000,
+      visitCount: 4,
+      ...overrides,
+    };
+  }
+
+  it('copies the fields a history entry needs to be opened', () => {
+    expect(historyToItem(entry())).toEqual({
+      kind: KIND_HISTORY,
+      key: 'history:h9',
+      title: 'Visited page',
+      url: 'https://example.com/page',
+      display: 'example.com/page',
+      lastUsed: 1_700_000_000_000,
+      historyId: 'h9',
+    });
+  });
+
+  it('takes lastVisitTime as milliseconds, needing no scaling', () => {
+    // Unlike chrome.sessions, which reports seconds. Comparable against a tab
+    // one second newer proves the units line up.
+    const item = historyToItem(entry({ lastVisitTime: 1_700_000_000_000 }));
+    const tab = tabToItem({
+      id: 1,
+      windowId: 1,
+      index: 0,
+      title: 'Open',
+      url: 'https://open.test/',
+      lastAccessed: 1_700_000_001_000,
+    });
+    expect(tab.lastUsed - item.lastUsed).toBe(1000);
+  });
+
+  it('reports no recency when the entry has never been visited', () => {
+    expect(historyToItem(entry({ lastVisitTime: undefined })).lastUsed).toBe(0);
+  });
+
+  it('normalizes a missing title to an empty string', () => {
+    expect(historyToItem(entry({ title: undefined })).title).toBe('');
+  });
+
+  it('rejects an entry with no url, which could not be opened', () => {
+    expect(() => historyToItem(entry({ url: undefined }))).toThrow(TypeError);
+  });
+
+  it('rejects an entry with no id', () => {
+    expect(() => historyToItem(entry({ id: undefined }))).toThrow(TypeError);
   });
 });
 

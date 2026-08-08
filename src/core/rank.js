@@ -6,17 +6,24 @@
 // keystroke. See ../../DESIGN.md §5.
 
 import { prepareQuery, prepareText, scorePrepared } from './fuzzy.js';
-import { KIND_BOOKMARK, KIND_CLOSED_TAB, KIND_TAB, byRecencyDesc } from './items.js';
+import {
+  KIND_BOOKMARK,
+  KIND_CLOSED_TAB,
+  KIND_HISTORY,
+  KIND_TAB,
+  byRecencyDesc,
+} from './items.js';
 
 /**
  * Which kind wins when two items point at the same page, best first.
  *
  * Switching to an open tab beats restoring a closed one, which beats loading
- * the page fresh from a bookmark: each keeps strictly more of the page's state
- * than the next. Showing all three would be three rows that look identical and
- * behave differently.
+ * the page fresh: each keeps strictly more of the page's state than the next.
+ * A bookmark beats a history entry for the same page because it is a deliberate
+ * record with a folder path, where a history entry is a bare URL. Showing all
+ * four would be four rows that look identical and behave differently.
  */
-const KIND_PRECEDENCE = [KIND_TAB, KIND_CLOSED_TAB, KIND_BOOKMARK];
+const KIND_PRECEDENCE = [KIND_TAB, KIND_CLOSED_TAB, KIND_BOOKMARK, KIND_HISTORY];
 
 /**
  * Position of `kind` in {@link KIND_PRECEDENCE}, lower being better.

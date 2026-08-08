@@ -19,20 +19,21 @@ into an existing split view**, which has no API (see §3).
 | Move an open tab to the current window, no reload | `chrome.tabs.move` then `chrome.tabs.update({active:true})` | supported; equivalent to dragging the tab, renderer is preserved |
 | Bookmark navigates the current tab | `chrome.tabs.update(activeTabId, {url})` | supported |
 | Move a tab into a split view | — | **no API; out of scope, see §3** |
-| Recent history as a source | `chrome.history.search()` | supported; deferred to a later milestone |
+| Recent history as a source | `chrome.history.search()`, `"history"` permission | supported; bounded to a configurable number of entries, 3000 by default |
 
 ## 2. Behaviour
 
-The popup is opened by the configured shortcut and lists open tabs and bookmarks
-in a single ranked list. Typing narrows the list; arrow keys (and `Ctrl-N` /
+The popup is opened by the configured shortcut and lists open tabs, bookmarks,
+recently closed tabs and history in a single ranked list — each source
+switchable off in the options. Typing narrows the list; arrow keys (and `Ctrl-N` /
 `Ctrl-P`) move the selection; `Enter` activates it.
 
 **Ranking** happens in two tiers, and the tier is absolute:
 
 1. **Open tabs**, whether in this window or another — the two are not separated
    from each other.
-2. **Everything else**: bookmarks, recently closed tabs, and any source added
-   later, which lands here by default rather than by being listed.
+2. **Everything else**: bookmarks, recently closed tabs, history, and any
+   source added later, which lands here by default rather than by being listed.
 
 No item in tier 2 ever appears above one in tier 1, whatever the query. The
 reasoning is that switching to something already open is the common case, and it
@@ -42,7 +43,8 @@ below open tabs matching it weakly — revisit if that becomes annoying in use.
 
 Within a tier: an empty query orders most-recently-used first — tabs by
 `Tab.lastAccessed`, bookmarks by `BookmarkTreeNode.dateLastUsed` falling back to
-`dateAdded`, closed tabs by `Session.lastModified` — and a non-empty query
+`dateAdded`, closed tabs by `Session.lastModified`, history by
+`HistoryItem.lastVisitTime` — and a non-empty query
 orders by fuzzy match score, with recency, then title, then key breaking ties.
 
 Note the interaction with the 50-row display cap: with more than fifty matching
@@ -56,10 +58,12 @@ were held back.
 | Open tab | move to the current window, just right of the active tab, then focus it | focus it where it already is, switching windows | move to the end of the other window and activate it there |
 | Bookmark | navigate the active tab to its URL | open it in a new tab here | open it in a new tab over there |
 | Recently closed tab | restore, then bring it here | restore, then follow it | restore, then send it over there |
+| History entry | navigate the active tab to its URL | open it in a new tab here | open it in a new tab over there |
 
 There is one exception to the table: a tab that is *already* in the current
-window is only focused, never moved. Moving it would drag it across to sit beside the active
-tab, silently rearranging a window the user can see, to no benefit.
+window is only focused, never moved. Moving it would drag it across to sit
+beside the active tab, silently rearranging a window the user can see, to no
+benefit.
 
 No path reloads an existing tab: `chrome.tabs.move` between two normal windows
 preserves the renderer, exactly as dragging the tab does.
@@ -104,17 +108,19 @@ along with it. See §4.
 
 **Deduplication.** Items pointing at the same page collapse to the one that
 preserves the most state: an open tab beats a recently closed one, which beats a
-bookmark. Switching keeps everything, restoring keeps the session history,
-loading a bookmark keeps nothing. Two items of the *same* kind survive — two
+bookmark, which beats a history entry. Switching keeps everything, restoring
+keeps the session history, loading keeps nothing — and a bookmark outranks a
+history entry for the same page because it is a deliberate record with a folder
+path where the history entry is a bare URL. Two items of the *same* kind survive — two
 tabs showing one page are two things to switch between, and two bookmarks of it
 are two entries the user made. A kind missing from that ordering sorts last
 rather than first, so adding a source and forgetting to rank it makes the new
 source lose ties instead of silently hiding open tabs.
 
 **Row anatomy.** Each row carries Chrome's cached favicon, the title, and a
-label plus the shortened URL. The label reads `tab`, `recently closed`, the
-bookmark's folder path,
-or — for a tab living in another window — `other window`, highlighted rather
+label plus the shortened URL. The label reads `tab`, `recently closed`,
+`history`, the bookmark's folder path, or — for a tab living in another window —
+`other window`, highlighted rather
 than muted because that is the one case where activating does something beyond
 switching. Both text lines are ellipsized rather than wrapped, so row heights
 stay uniform and arrow-key navigation does not feel unsteady; the full title and
@@ -189,13 +195,15 @@ src/                 <- Chrome loads this directory unpacked; there is no build 
     rank.js          buildIndex(items) once; rank(index, query) per keystroke
     plan.js          (item, modifiers, browserState) -> Action
   adapters/          the only place chrome.* is touched
-    source.js        tabs.query + bookmarks.getTree -> SearchItem[]
+    source.js        tabs / bookmarks / sessions / history -> SearchItem[]
     exec.js          Action -> chrome.* calls
+    settings.js      chrome.storage.sync <-> Settings
   popup/
     index.html
     popup.css
     main.js          wiring: read -> rank on keystroke -> render -> plan -> exec
                      (restores are handed to background.js instead)
+  options/           the options page; same wiring-only rule as popup/
 tests/               vitest; imports src/core/* directly
 bench/               timings for the ranking path; npm run bench
 ```
@@ -293,7 +301,45 @@ Chrome emits no ResourceTiming entries for `chrome-extension://` subresources,
 so individual module fetches cannot be timed; and MV3 forbids inline scripts on
 extension pages, so an inline `<script>` cannot be used to timestamp anything.
 
-## 7. Milestones
+## 7. History is bounded, and why
+
+Ranking is linear in the number of candidates, and a real browsing history runs
+to hundreds of thousands of entries. Measured on the actual code path, with
+memory being what the index holds:
+
+| Candidates | `buildIndex` (every open) | `rank` per keystroke | Memory |
+| --- | --- | --- | --- |
+| 5,000 | 36 ms | 3-4 ms | 12 MB |
+| 20,000 | 128 ms | 14-17 ms | 67 MB |
+| 50,000 | 326 ms | 41-61 ms | 100 MB |
+| 100,000 | 699 ms | 92-122 ms | 184 MB |
+| 200,000 | 1,478 ms | 149-198 ms | 377 MB |
+
+So history is loaded as a bounded window — the most recent N entries, N being a
+setting that defaults to 3000 — rather than in full. Above roughly 10,000 total
+candidates the popup is unusable whatever is done to it.
+
+Note that the binding constraint is per-keystroke CPU, not memory. Most of that
+footprint is the precomputed `PreparedText` arrays, and dropping them for the
+lower tier would cut memory by roughly twenty times — but preparation is worth
+1.5-2x on scoring (the 15x came from scratch-buffer reuse, §6), so scoring would
+get *slower*. The memory ceiling rises and the CPU ceiling does not move.
+
+The rejected alternative was to let Chrome do the matching, calling
+`chrome.history.search({text: query})` per keystroke. That scales to the whole
+history because Chrome maintains the index, and it need not block: local sources
+render immediately and history appends underneath, which the tier ordering makes
+safe. It was rejected on *recall*, not speed — Chrome's `text` is substring and
+prefix matching, so `ghb` would find `github.com` in every other source and
+nothing in history. Half the list would answer to a different rule than the
+other half.
+
+Two API details worth not rediscovering: `startTime` defaults to **24 hours
+ago**, so it must be passed explicitly or the feature silently becomes "pages
+visited today"; and `HistoryItem.lastVisitTime` is in milliseconds, unlike
+`Session.lastModified`.
+
+## 8. Milestones
 
 Each milestone ends in a commit.
 
@@ -312,9 +358,10 @@ Each milestone ends in a commit.
    source, restore-then-focus, and deduplication by state preserved.
 6. ~~**Send to the other window**~~ *(done)* — `Ctrl+Enter` puts an item in the
    other window without moving focus; the modifier becomes a three-way intent.
-7. **Options** (optional) — scoring weights, `Enter` behaviour, sources enabled.
+7. ~~**History and options**~~ *(done)* — history as a bounded fourth source,
+   and an options page for the sources and the history length.
 
-## 8. Deferred and future work
+## 9. Deferred and future work
 
 Nothing here is blocking; each is recorded so the reasoning is not re-derived.
 
@@ -326,11 +373,6 @@ Nothing here is blocking; each is recorded so the reasoning is not re-derived.
   `sessionId`, which the API reference does not say — that needs checking in a
   browser before the shape of the feature can be decided. A window that can only
   be restored whole is a different sort of row from everything else in the list.
-- **History as a source.** `"history"` permission and `chrome.history.search`.
-  The item model accommodates it, and `KIND_PRECEDENCE` in `rank.js` is where it
-  would slot in — below recently closed, since a history entry is a bare URL
-  with no state to restore. Worth having because recently closed is capped at 25
-  entries and so reaches back minutes, not days.
 - **Tabs on other synced devices.** `chrome.sessions.getDevices()`, same
   permission already granted, same item model. Activating one would have to open
   the URL rather than restore, since the tab is on another machine.

@@ -7,7 +7,8 @@ that little logic is stranded outside the tests.
 
 | Module | Direction | Contents |
 | --- | --- | --- |
-| `source.js` | read | `chrome.tabs.query`, `chrome.bookmarks.getTree` and `chrome.sessions.getRecentlyClosed` to `SearchItem[]`, plus the current window and active tab that actions are planned against. |
+| `source.js` | read | `chrome.tabs.query`, `chrome.bookmarks.getTree`, `chrome.sessions.getRecentlyClosed` and `chrome.history.search` to `SearchItem[]`, plus the current window and active tab that actions are planned against. Reads only the sources the settings enable. |
+| `settings.js` | both | `chrome.storage.sync` to and from `Settings`, validated through `core/settings.js` in both directions. |
 | `exec.js` | write | Performs the `Action` values produced by `core/plan.js` — `chrome.tabs.move`, `update`, `create`, `chrome.windows.update` and `chrome.sessions.restore`. Returns the reopened tab after a restore, so the caller can plan a follow-up against it. |
 
 Neither module catches anything. Chrome refuses several moves — across the

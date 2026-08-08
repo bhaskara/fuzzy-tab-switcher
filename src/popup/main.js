@@ -4,10 +4,11 @@
 // core/ instead.
 
 import { execute } from '../adapters/exec.js';
+import { readSettings } from '../adapters/settings.js';
 import { readAll, readBrowserState } from '../adapters/source.js';
 import { positions } from '../core/fuzzy.js';
 import { toSegments } from '../core/highlight.js';
-import { KIND_CLOSED_TAB, KIND_TAB } from '../core/items.js';
+import { KIND_CLOSED_TAB, KIND_HISTORY, KIND_TAB } from '../core/items.js';
 import {
   INTENT_HERE,
   INTENT_IN_PLACE,
@@ -103,6 +104,7 @@ function isElsewhere(item) {
  * @returns {string}
  */
 function kindLabel(item) {
+  if (item.kind === KIND_HISTORY) return 'history';
   if (item.kind === KIND_CLOSED_TAB) return 'recently closed';
   if (item.kind !== KIND_TAB) return item.folderPath || 'bookmark';
   return isElsewhere(item) ? 'other window' : 'tab';
@@ -350,7 +352,12 @@ async function main() {
   setStatus('Loading…');
 
   try {
-    const [items, state] = await Promise.all([readAll(), readBrowserState()]);
+    // Settings first and alone: which sources to read depends on them, so
+    // reading everything in parallel and discarding the unwanted would defeat
+    // the point of being able to switch a source off.
+    const settings = await readSettings();
+    mark('settings');
+    const [items, state] = await Promise.all([readAll(settings), readBrowserState()]);
     mark('sources');
     // The window Ctrl+Enter targets is derived from the tabs just read rather
     // than queried separately: neither the tabs nor the windows API reports

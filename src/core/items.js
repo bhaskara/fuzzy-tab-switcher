@@ -1,5 +1,5 @@
 // The SearchItem model: one normalized shape covering every searchable source
-// (open tabs and bookmarks now; history later), together with the pure
+// — open tabs, bookmarks, recently closed tabs and history — with the pure
 // conversions into it from the raw shapes the Chrome APIs hand back. Nothing
 // here touches chrome.* — the conversions take plain objects so they can be
 // exercised from tests in Node.
@@ -12,6 +12,9 @@ export const KIND_BOOKMARK = 'bookmark';
 
 /** Discriminator for items backed by a recently closed tab. */
 export const KIND_CLOSED_TAB = 'closed';
+
+/** Discriminator for items backed by a history entry. */
+export const KIND_HISTORY = 'history';
 
 /**
  * Fields every item carries, whatever its source.
@@ -45,9 +48,15 @@ export const KIND_CLOSED_TAB = 'closed';
  */
 
 /**
+ * An item backed by a page in the browsing history.
+ *
+ * @typedef {ItemBase & {kind: 'history', historyId: string}} HistoryItem
+ */
+
+/**
  * Any searchable item, discriminated by `kind`.
  *
- * @typedef {TabItem|BookmarkItem|ClosedTabItem} SearchItem
+ * @typedef {TabItem|BookmarkItem|ClosedTabItem|HistoryItem} SearchItem
  */
 
 /**
@@ -195,6 +204,45 @@ export function closedTabToItem(session) {
     display: displayUrl(url),
     lastUsed: (session.lastModified ?? 0) * 1000,
     sessionId: tab.sessionId,
+  });
+}
+
+/**
+ * Convert a raw history entry into a {@link HistoryItem}.
+ *
+ * @param {Object} entry A `chrome.history.HistoryItem`-shaped object.
+ * @returns {HistoryItem} A frozen item.
+ *
+ * Preconditions
+ * -------------
+ * `entry.id` and `entry.url` must be present. Entries without a URL cannot be
+ * opened and are expected to have been filtered out by the caller.
+ *
+ * Notes
+ * -----
+ * `lastVisitTime` is already in milliseconds, unlike the seconds that
+ * `chrome.sessions` reports, so it needs no scaling.
+ *
+ * Throws
+ * ------
+ * TypeError
+ *     If `entry.id` or `entry.url` is missing.
+ */
+export function historyToItem(entry) {
+  if (typeof entry.id !== 'string') {
+    throw new TypeError(`history entry is missing a string id: ${JSON.stringify(entry)}`);
+  }
+  if (typeof entry.url !== 'string') {
+    throw new TypeError(`history entry ${entry.id} has no url`);
+  }
+  return Object.freeze({
+    kind: KIND_HISTORY,
+    key: `${KIND_HISTORY}:${entry.id}`,
+    title: entry.title ?? '',
+    url: entry.url,
+    display: displayUrl(entry.url),
+    lastUsed: entry.lastVisitTime ?? 0,
+    historyId: entry.id,
   });
 }
 

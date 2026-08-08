@@ -7,7 +7,7 @@
 // them — is therefore a pure function over a small truth table that can be
 // tested exhaustively with no browser.
 
-import { KIND_BOOKMARK, KIND_CLOSED_TAB, KIND_TAB } from './items.js';
+import { KIND_BOOKMARK, KIND_CLOSED_TAB, KIND_HISTORY, KIND_TAB } from './items.js';
 
 /** Bring the item into the current window. The default, on Enter. */
 export const INTENT_HERE = 'here';
@@ -144,14 +144,17 @@ function planTab(item, intent, state) {
 }
 
 /**
- * Plan the activation of a bookmark.
+ * Plan the activation of an item that is just a URL to open.
  *
- * @param {import('./items.js').BookmarkItem} item
+ * Bookmarks and history entries are indistinguishable here: neither has a live
+ * tab behind it, so both are opened rather than switched to.
+ *
+ * @param {import('./items.js').BookmarkItem|import('./items.js').HistoryItem} item
  * @param {string} intent
  * @param {BrowserState} state
  * @returns {Action}
  */
-function planBookmark(item, intent, state) {
+function planUrlItem(item, intent, state) {
   if (intent === INTENT_OTHER_WINDOW) {
     if (state.otherWindowId === null) {
       return Object.freeze({ type: 'reportProblem', message: 'No other window' });
@@ -170,7 +173,7 @@ function planBookmark(item, intent, state) {
  * | Selected | here (Enter) | inPlace (Shift) | otherWindow (Ctrl) |
  * | --- | --- | --- | --- |
  * | open tab | move to the current window beside the active tab, activate | focus it where it is, switching windows | move to the other window's end, activate without following |
- * | bookmark | navigate the active tab | open in a new tab here | open in a new tab over there |
+ * | bookmark or history | navigate the active tab | open in a new tab here | open in a new tab over there |
  * | closed tab | restore | restore | restore |
  *
  * Restoring ignores the intent because restoring is only half the job: where
@@ -195,7 +198,9 @@ function planBookmark(item, intent, state) {
  */
 export function plan(item, intent, state) {
   if (item.kind === KIND_TAB) return planTab(item, intent, state);
-  if (item.kind === KIND_BOOKMARK) return planBookmark(item, intent, state);
+  if (item.kind === KIND_BOOKMARK || item.kind === KIND_HISTORY) {
+    return planUrlItem(item, intent, state);
+  }
   if (item.kind === KIND_CLOSED_TAB) {
     return Object.freeze({ type: 'restoreSession', sessionId: item.sessionId });
   }
