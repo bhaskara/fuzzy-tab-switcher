@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Switch to</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <input
+      id="query"
+      type="text"
+      placeholder="Switch to…"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+      aria-label="Search tabs"
+      aria-controls="results"
+    />
+    <ul id="results" role="listbox" aria-label="Results"></ul>
+    <p id="status" class="status" hidden></p>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

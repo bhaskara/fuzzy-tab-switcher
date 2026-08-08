@@ -1,0 +1,14 @@
+{
+  "name": "tab-switcher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension for jumping to open tabs and bookmarks by fuzzy keyboard search. Node is a development dependency only, for running tests; the extension itself has no dependencies and no build step.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

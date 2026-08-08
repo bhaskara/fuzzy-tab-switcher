@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Switcher",
+  "version": "0.1.0",
+  "description": "Jump to an open tab or bookmark by fuzzy keyboard search.",
+  "permissions": ["tabs", "bookmarks", "favicon"],
+  "action": {
+    "default_popup": "popup/index.html",
+    "default_title": "Switch to tab or bookmark"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Open switch-to"
+    }
+  }
+}
