@@ -1,6 +1,6 @@
 # `src/popup/` — the popup UI
 
-The window opened by the `_execute_action` shortcut (`Ctrl+Shift+K` by default)
+The window opened by the `_execute_action` shortcut (`Ctrl+Comma` by default)
 and by clicking the toolbar icon: a search field over a ranked list of tabs and
 bookmarks.
 

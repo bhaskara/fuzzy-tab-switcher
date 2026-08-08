@@ -36,7 +36,7 @@ feasibility table, the decisions taken, and the milestone plan.
 
 Load `src/` via **Load unpacked** in `chrome://extensions` with Developer mode
 on; after editing a file, press reload on the extension card. Rebind the
-shortcut (default `Ctrl+Shift+K`) at `chrome://extensions/shortcuts`.
+shortcut (default `Ctrl+Comma`) at `chrome://extensions/shortcuts`.
 
 Node is needed only to run the tests and benchmarks, never to build or run the
 extension:

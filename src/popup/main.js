@@ -22,6 +22,12 @@ mark('modules');
  */
 const MAX_RENDERED = 50;
 
+/**
+ * Base of Chrome's cached-favicon endpoint, which the `"favicon"` permission
+ * grants. The old `chrome://favicon` scheme does not exist under MV3.
+ */
+const FAVICON_BASE = chrome.runtime.getURL('/_favicon/');
+
 const queryEl = document.getElementById('query');
 const resultsEl = document.getElementById('results');
 const statusEl = document.getElementById('status');
@@ -65,14 +71,50 @@ function appendHighlighted(parent, text, matchedIndices) {
 }
 
 /**
+ * Whether activating this item would pull a tab in from another window.
+ *
+ * @param {import('../core/items.js').SearchItem} item
+ * @returns {boolean} False until the browser state has been read.
+ */
+function isElsewhere(item) {
+  return (
+    item.kind === KIND_TAB &&
+    browserState !== null &&
+    item.windowId !== browserState.currentWindowId
+  );
+}
+
+/**
  * Short label describing where an item came from.
+ *
+ * A tab living in another window says so rather than saying `tab`, because that
+ * is the case where activating it does something extra — it gets moved into
+ * this window. Nothing else produces that label, so a row marked this way is
+ * still unambiguously a tab.
  *
  * @param {import('../core/items.js').SearchItem} item
  * @returns {string}
  */
 function kindLabel(item) {
-  if (item.kind === KIND_TAB) return 'tab';
-  return item.folderPath || 'bookmark';
+  if (item.kind !== KIND_TAB) return item.folderPath || 'bookmark';
+  return isElsewhere(item) ? 'other window' : 'tab';
+}
+
+/**
+ * URL of Chrome's cached favicon for a page.
+ *
+ * Chrome serves a generic globe for pages it has no icon for, so there is no
+ * missing-icon case to handle. The icon is fetched at twice its 16px display
+ * size so that it stays crisp on hidpi screens.
+ *
+ * @param {string} pageUrl The page whose icon is wanted.
+ * @returns {string} An extension URL, safe to use as an `img` source.
+ */
+function faviconUrl(pageUrl) {
+  // Built by concatenation, and the base resolved once at load: this runs for
+  // every drawn row on every keystroke, which is no place for a URL object and
+  // an extension API call.
+  return `${FAVICON_BASE}?pageUrl=${encodeURIComponent(pageUrl)}&size=32`;
 }
 
 /**
@@ -91,6 +133,15 @@ function renderResult(ranked, query, position) {
   li.id = `result-${position}`;
   li.setAttribute('role', 'option');
   li.setAttribute('aria-selected', 'false');
+  // Both text lines are ellipsized, so hovering is the only way to read a long
+  // title or URL in full.
+  li.title = item.title ? `${item.title}\n${item.url}` : item.url;
+
+  const icon = document.createElement('img');
+  icon.className = 'result-icon';
+  icon.src = faviconUrl(item.url);
+  // Decorative: the title beside it already names the page.
+  icon.alt = '';
 
   const title = document.createElement('span');
   title.className = 'result-title';
@@ -99,6 +150,7 @@ function renderResult(ranked, query, position) {
   const kind = document.createElement('span');
   kind.className = 'result-kind';
   kind.textContent = kindLabel(item);
+  kind.classList.toggle('result-kind-elsewhere', isElsewhere(item));
 
   const url = document.createElement('span');
   url.className = 'result-url';
@@ -108,7 +160,7 @@ function renderResult(ranked, query, position) {
   sub.className = 'result-sub';
   sub.append(kind, url);
 
-  li.append(title, sub);
+  li.append(icon, title, sub);
   return li;
 }
 
@@ -116,11 +168,14 @@ function renderResult(ranked, query, position) {
  * Show a message under the results, or clear it.
  *
  * @param {string|null} message Message to show, or null to hide the line.
+ * @param {{error?: boolean}} [options] `error` styles the line as a failure
+ *   rather than as ordinary information.
  * @returns {void}
  */
-function setStatus(message) {
+function setStatus(message, { error = false } = {}) {
   statusEl.textContent = message ?? '';
   statusEl.hidden = message === null;
+  statusEl.classList.toggle('status-error', error);
 }
 
 /**
@@ -171,7 +226,7 @@ function refresh() {
   select(0);
 
   if (ranked.length === 0) {
-    setStatus(query ? 'No matches' : 'Nothing to show');
+    setStatus(query ? `No tab or bookmark matches “${query}”` : 'No tabs or bookmarks to show');
   } else if (ranked.length > shown.length) {
     setStatus(`Showing ${shown.length} of ${ranked.length}`);
   } else {
@@ -193,7 +248,7 @@ async function activate(alternate) {
   } catch (err) {
     // Chrome refuses some moves — across the incognito boundary, for instance.
     // Say so and stay open rather than closing as though it had worked.
-    setStatus(`Could not switch: ${err.message}`);
+    setStatus(`Could not switch: ${err.message}`, { error: true });
     throw err;
   }
   window.close();
@@ -239,6 +294,10 @@ async function main() {
     activate(event.shiftKey);
   });
 
+  // Normally replaced within milliseconds, but a very large bookmark tree or a
+  // busy browser should not leave the popup looking empty and broken.
+  setStatus('Loading…');
+
   try {
     const [items, state] = await Promise.all([readAll(), readBrowserState()]);
     mark('sources');
@@ -256,7 +315,7 @@ async function main() {
   } catch (err) {
     // The popup is the only surface a user ever sees, so an adapter failure has
     // to be shown rather than swallowed. Re-thrown for the devtools console.
-    setStatus(`Could not read tabs and bookmarks: ${err.message}`);
+    setStatus(`Could not read tabs and bookmarks: ${err.message}`, { error: true });
     throw err;
   }
 }

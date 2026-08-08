@@ -55,6 +55,14 @@ about keys and `core/plan.js` does not: the popup maps `Shift` onto an
 single row that behaves as the tab (switching beats reloading). The row is
 labelled as a tab.
 
+**Row anatomy.** Each row carries Chrome's cached favicon, the title, and a
+label plus the shortened URL. The label reads `tab`, the bookmark's folder path,
+or — for a tab living in another window — `other window`, highlighted rather
+than muted because that is the one case where activating does something beyond
+switching. Both text lines are ellipsized rather than wrapped, so row heights
+stay uniform and arrow-key navigation does not feel unsteady; the full title and
+URL are on the row's tooltip.
+
 ## 3. Split view: deferred
 
 Chrome 140 added a read-only `Tab.splitViewId` (with `tabs.SPLIT_VIEW_ID_NONE`
@@ -87,8 +95,13 @@ not a change spread across the UI.
 - **`tabs.move` restrictions.** Only between `windowType: "normal"` windows,
   never across the incognito boundary, and moving the last tab out of a window
   closes that window. Sources are filtered to normal windows for this reason.
-- **Shortcut choice.** `Ctrl+Shift+A` is reserved by Chrome's own tab search and
-  cannot be taken. We suggest `Ctrl+Shift+K`; users can rebind freely.
+- **Shortcut choice.** `suggested_key` accepts only `A`-`Z`, `0`-`9`, and a
+  short named list — `Comma`, `Period`, `Home`, `End`, `PageUp`, `PageDown`,
+  `Space`, `Insert`, `Delete`, the arrow keys and the media keys — and must
+  include `Ctrl` or `Alt`. No other punctuation is legal, so `Ctrl+'` and the
+  like cannot be used, in the manifest or via `chrome://extensions/shortcuts`.
+  `Ctrl+Shift+A` is additionally reserved by Chrome's own tab search. We suggest
+  `Ctrl+Comma`, which Chrome leaves unbound; users can rebind freely.
 - **Favicons.** `chrome://favicon` is gone in MV3. We use the `"favicon"`
   permission with `chrome.runtime.getURL("/_favicon/?pageUrl=…&size=32")`.
 
@@ -219,8 +232,8 @@ Each milestone ends in a commit.
 3. ~~**Keyboard and activation**~~ *(done)* — full key handling, `plan.js` +
    `exec.js`, the `Enter` / `Shift+Enter` table from §2. Unit tests for
    `plan.js`. The extension is usable from here on.
-4. **Polish** — favicons, window indicators, empty and error states, popup
-   sizing and scrolling.
+4. ~~**Polish**~~ *(done)* — favicons, a marker on tabs living in another
+   window, empty and error states, popup sizing and scrolling.
 5. **Options** (optional) — scoring weights, `Enter` behaviour, sources enabled.
 6. **History source** (deferred) — `"history"` permission and a third source;
    the item model already accommodates it.
