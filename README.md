@@ -1,3 +1,5 @@
+# Fuzzy Tab Switcher
+
 This is a Chrome extension that allows rapidly opening/switching tabs/bookmarks in Chrome with a keyboard based workflow.
 
 The basic command is switch-to.  The idea is when this is invoked (using some customizable keyboard shortcut), a pop-up opens, that is similar to the usual control-shift-a "Search tabs" command.  However, it differs in a couple of ways:
@@ -31,6 +33,7 @@ feasibility table, the decisions taken, and the milestone plan.
 | [`tests/`](tests/) | Vitest unit tests for the pure core. |
 | [`bench/`](bench/) | Timings for the ranking path, which the "fast and responsive" requirement above needs checked rather than assumed. |
 | [`DESIGN.md`](DESIGN.md) | Design, platform constraints, and milestones. |
+| [`LICENSE`](LICENSE) | MIT. |
 
 ## Development
 
@@ -46,4 +49,8 @@ npm install
 npm test
 npm run bench
 ```
+
+## License
+
+[MIT](LICENSE).
 
