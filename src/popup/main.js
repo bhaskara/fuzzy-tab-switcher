@@ -10,6 +10,9 @@ import { toSegments } from '../core/highlight.js';
 import { KIND_TAB } from '../core/items.js';
 import { plan } from '../core/plan.js';
 import { buildIndex, rank } from '../core/rank.js';
+import { mark, report } from './timing.js';
+
+mark('modules');
 
 /**
  * How many results to put in the DOM. Ranking is cheap and runs over
@@ -238,9 +241,18 @@ async function main() {
 
   try {
     const [items, state] = await Promise.all([readAll(), readBrowserState()]);
+    mark('sources');
     browserState = state;
     index = buildIndex(items);
+    mark('index');
     refresh();
+    mark('render');
+    console.log(`[tab-switcher] ${items.length} items, ${index.length} after dedup`);
+    // The frame after the first render is the first the user could actually see.
+    requestAnimationFrame(() => {
+      mark('paint');
+      report(document.getElementById('timing'));
+    });
   } catch (err) {
     // The popup is the only surface a user ever sees, so an adapter failure has
     // to be shown rather than swallowed. Re-thrown for the devtools console.
