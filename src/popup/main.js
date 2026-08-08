@@ -266,7 +266,15 @@ async function activate(intent) {
     // against the reopened tab is what makes a restored tab behave like any
     // other tab under every intent.
     if (restored !== null) {
-      await execute(plan(tabToItem(restored), intent, browserState));
+      // The follow-up can refuse just as the first plan can — restoring a
+      // closed tab with no other window to send it to, for one — and exec has
+      // no case for that.
+      const followUp = plan(tabToItem(restored), intent, browserState);
+      if (followUp.type === 'reportProblem') {
+        setStatus(followUp.message);
+        return;
+      }
+      await execute(followUp);
     }
   } catch (err) {
     // Chrome refuses some moves — across the incognito boundary, for instance.
