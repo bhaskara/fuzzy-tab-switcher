@@ -41,7 +41,11 @@ export async function execute(action) {
       return session?.tab ?? null;
     }
 
-    case 'moveAndFocus':
+    case 'activateTab':
+      await chrome.tabs.update(action.tabId, { active: true });
+      return null;
+
+    case 'moveAndActivate':
       // Moving a tab between two normal windows preserves its renderer, exactly
       // as dragging it does, so the page is not reloaded and keeps its scroll
       // position and form state.
@@ -49,6 +53,8 @@ export async function execute(action) {
         windowId: action.toWindowId,
         index: action.index,
       });
+      // Deliberately no windows.update: `active` does not move window focus, so
+      // sending a tab to another window leaves the user where they are.
       await chrome.tabs.update(action.tabId, { active: true });
       return null;
 
@@ -61,6 +67,8 @@ export async function execute(action) {
       return null;
 
     default:
+      // Includes `reportProblem`, which the popup is expected to have handled
+      // and shown to the user before getting here.
       throw new TypeError(`unknown action type ${JSON.stringify(action.type)}`);
   }
 }

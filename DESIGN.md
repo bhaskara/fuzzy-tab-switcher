@@ -34,11 +34,25 @@ query, fuzzy match score dominates and recency breaks ties.
 
 **Activation.**
 
-| Selected item | `Enter` | `Shift+Enter` |
-| --- | --- | --- |
-| Open tab | move the tab to the current window, just right of the active tab, then focus it | focus the tab where it already is, switching windows |
-| Bookmark | navigate the active tab to its URL | open it in a new tab |
-| Recently closed tab | restore it, then bring it here and focus it | restore it, then focus it where it landed |
+| Selected item | `Enter` (here) | `Shift+Enter` (in place) | `Ctrl+Enter` (other window) |
+| --- | --- | --- | --- |
+| Open tab | move to the current window, just right of the active tab, then focus it | focus it where it already is, switching windows | move to the end of the other window and activate it there |
+| Bookmark | navigate the active tab to its URL | open it in a new tab here | open it in a new tab over there |
+| Recently closed tab | restore, then bring it here | restore, then follow it | restore, then send it over there |
+
+**`Ctrl+Enter` never moves window focus**, which is its whole purpose: with two
+windows side by side, it puts something into the other one while the user goes
+on working in this one. That rests on Chrome documenting `active` on both
+`tabs.create` and `tabs.update` as "does not affect whether the window is
+focused" — only `chrome.windows.update({focused: true})` moves focus, and no
+action planned for this intent uses it. A test asserts that directly rather than
+trusting the table.
+
+Neither the tabs nor the windows API reports window recency, so "the other
+window" is derived from the tabs: the window holding the most recently accessed
+tab outside the current one. With two windows side by side that is simply the
+other one. With only one window open, activation reports `No other window` and
+the popup stays open rather than guessing.
 
 with one exception: a tab that is *already* in the current window is only
 focused, never moved. Moving it would drag it across to sit beside the active
@@ -48,10 +62,15 @@ Neither path reloads an existing tab: `chrome.tabs.move` between two normal
 windows preserves the renderer, exactly as dragging the tab does.
 
 **Keys.** `Down`/`Up` and `Ctrl-N`/`Ctrl-P` move the selection, wrapping at both
-ends; `Enter` and `Shift+Enter` activate as above; `Escape` closes. Clicking a
-row activates it, with `Shift` held for the alternate behaviour. The popup knows
-about keys and `core/plan.js` does not: the popup maps `Shift` onto an
-`alternate` flag, so the truth table stays free of input concerns.
+ends; `Enter`, `Shift+Enter` and `Ctrl+Enter` activate as above; `Escape`
+closes. Clicking a row activates it, honouring the same modifiers. Shift wins
+over Ctrl when both are held.
+
+The popup knows about keys and `core/plan.js` does not: the popup maps the
+modifiers onto one of three named intents — `here`, `inPlace`, `otherWindow` —
+so the truth table stays free of input concerns and rebinding is a one-file
+change. An unrecognized intent falls back to `here`, since refusing to switch
+tabs is a worse failure than switching them the ordinary way.
 
 **Restoring is two steps.** `chrome.sessions.restore` reopens a tab with its
 back and forward history intact — the whole advantage over loading the same URL
@@ -157,15 +176,20 @@ test tooling never ships.
 *returns* one:
 
 ```js
-{ type: 'focusTab',    tabId, windowId }
-{ type: 'moveAndFocus', tabId, toWindowId, index }
-{ type: 'navigateActive', tabId, url }
-{ type: 'openNewTab',  url, windowId }
+{ type: 'focusTab',        tabId, windowId }   // the only one that moves focus
+{ type: 'activateTab',     tabId }
+{ type: 'moveAndActivate', tabId, toWindowId, index }
+{ type: 'navigateActive',  tabId, url }
+{ type: 'openNewTab',      url, windowId }
+{ type: 'restoreSession',  sessionId }
+{ type: 'reportProblem',   message }           // handled by the popup, never by exec
 ```
 
-All of the branching in the spec — tab vs. bookmark, plain vs. `Shift`, and
-later split vs. not — becomes a pure function over a small truth table, testable
-exhaustively without a browser.
+All of the branching in the spec — item kind against intent, and later split
+view against not — becomes a pure function over a small truth table, testable
+exhaustively without a browser. That `focusTab` is the only action moving window
+focus is what makes "send it over there without following it" expressible at
+all, and is asserted in the tests rather than left as a convention.
 
 **Fuzzy scoring is swappable.** `core/fuzzy.js` exposes `score(query, text)`,
 returning a number or `null` for no match, and `positions(query, text)`,
@@ -252,7 +276,9 @@ Each milestone ends in a commit.
    window, empty and error states, popup sizing and scrolling.
 5. ~~**Recently closed tabs**~~ *(done)* — `"sessions"` permission, a third
    source, restore-then-focus, and deduplication by state preserved.
-6. **Options** (optional) — scoring weights, `Enter` behaviour, sources enabled.
+6. ~~**Send to the other window**~~ *(done)* — `Ctrl+Enter` puts an item in the
+   other window without moving focus; the modifier becomes a three-way intent.
+7. **Options** (optional) — scoring weights, `Enter` behaviour, sources enabled.
 
 ## 8. Deferred and future work
 

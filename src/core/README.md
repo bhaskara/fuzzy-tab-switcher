@@ -13,7 +13,7 @@ Modules take plain objects, not live Chrome objects, so tests can pass literals.
 | `fuzzy.js` | `score` and `positions`. Hand-rolled fzy-style scorer, deliberately behind a small interface so it can be swapped for `fzf-for-js`, `uFuzzy`, or anything else. | 2 |
 | `highlight.js` | Matched character indices to runs of text, so the popup builds one element per run. | 2 |
 | `rank.js` | `buildIndex(items)` once when the popup opens, then `rank(index, query)` on every keystroke, including which kind wins when two items point at one page. | 2, 5 |
-| `plan.js` | A selection plus browser state to a described `Action`, which `adapters/exec.js` then performs. Where the tab-vs-bookmark and plain-vs-alternate truth table lives. | 3 |
+| `plan.js` | A selection plus browser state to a described `Action`, which `adapters/exec.js` then performs. Where the item-kind by intent truth table lives, and which window `Ctrl+Enter` targets. | 3, 6 |
 
 ## A note on the one exception
 

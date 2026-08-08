@@ -14,15 +14,18 @@ bookmarks.
 | Key | Does |
 | --- | --- |
 | `Down` / `Up`, `Ctrl-N` / `Ctrl-P` | Move the selection, wrapping at both ends. |
-| `Enter` | Move the selected tab to this window and focus it, navigate this tab to the selected bookmark, or restore the selected closed tab and bring it here. |
-| `Shift+Enter` | Focus the selected tab where it already is, open the selected bookmark in a new tab, or restore the selected closed tab where it landed. |
+| `Enter` | Bring the item into this window: move the tab here and focus it, navigate this tab to the bookmark, or restore the closed tab here. |
+| `Shift+Enter` | Go to the item instead: focus the tab where it already is, or open the bookmark in a new tab here. |
+| `Ctrl+Enter` | Put the item in the *other* window without following it — window focus does not move. Reports `No other window` and stays open if there is only one. |
 | `Escape` | Close. |
 
-Clicking a row activates it, with `Shift` held for the alternate behaviour.
+Clicking a row activates it, honouring the same modifiers. Shift wins over Ctrl
+when both are held.
 
-Only this directory knows about keys: `Shift` is mapped to an `alternate` flag
-before `core/plan.js` sees it, so the behaviour table stays free of input
-concerns and can be rebound here alone.
+Only this directory knows about keys: the modifiers are mapped to one of three
+named intents — `here`, `inPlace`, `otherWindow` — before `core/plan.js` sees
+them, so the behaviour table stays free of input concerns and can be rebound
+here alone.
 
 Chrome anchors the popup to the toolbar icon; it cannot be centred on screen,
 and it closes whenever it loses focus. Maximum size is 800x600, and the popup

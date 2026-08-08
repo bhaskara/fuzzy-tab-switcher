@@ -8,7 +8,13 @@ import { readAll, readBrowserState } from '../adapters/source.js';
 import { positions } from '../core/fuzzy.js';
 import { toSegments } from '../core/highlight.js';
 import { KIND_CLOSED_TAB, KIND_TAB, tabToItem } from '../core/items.js';
-import { plan } from '../core/plan.js';
+import {
+  INTENT_HERE,
+  INTENT_IN_PLACE,
+  INTENT_OTHER_WINDOW,
+  mostRecentOtherWindow,
+  plan,
+} from '../core/plan.js';
 import { buildIndex, rank } from '../core/rank.js';
 import { mark, report } from './timing.js';
 
@@ -238,21 +244,29 @@ function refresh() {
 /**
  * Act on the highlighted result and close the popup.
  *
- * @param {boolean} alternate Whether the secondary behaviour was requested.
+ * @param {string} intent One of the `INTENT_` constants from `core/plan.js`.
  * @returns {Promise<void>}
  */
-async function activate(alternate) {
+async function activate(intent) {
   const entry = shown[selected];
   if (!entry || browserState === null) return;
-  const modifiers = { alternate };
+
+  const action = plan(entry.item, intent, browserState);
+  if (action.type === 'reportProblem') {
+    // Nothing happened and nothing will; say why and stay open so the user can
+    // choose differently rather than pressing into a closed popup.
+    setStatus(action.message);
+    return;
+  }
+
   try {
-    const restored = await execute(plan(entry.item, modifiers, browserState));
+    const restored = await execute(action);
     // Restoring a closed tab only reopens it; Chrome decides which window it
     // lands in, and that is not knowable until it has. Planning a second action
     // against the reopened tab is what makes a restored tab behave like any
-    // other tab — brought here on Enter, left in place on Shift+Enter.
+    // other tab under every intent.
     if (restored !== null) {
-      await execute(plan(tabToItem(restored), modifiers, browserState));
+      await execute(plan(tabToItem(restored), intent, browserState));
     }
   } catch (err) {
     // Chrome refuses some moves — across the incognito boundary, for instance.
@@ -261,6 +275,21 @@ async function activate(alternate) {
     throw err;
   }
   window.close();
+}
+
+/**
+ * Which activation the modifier keys held during `event` ask for.
+ *
+ * Shift wins over Ctrl when both are held, since following the item somewhere
+ * is the more emphatic request.
+ *
+ * @param {KeyboardEvent|MouseEvent} event
+ * @returns {string} One of the `INTENT_` constants.
+ */
+function intentFor(event) {
+  if (event.shiftKey) return INTENT_IN_PLACE;
+  if (event.ctrlKey) return INTENT_OTHER_WINDOW;
+  return INTENT_HERE;
 }
 
 /**
@@ -280,7 +309,7 @@ function onKeyDown(event) {
     moveSelection(-1);
   } else if (event.key === 'Enter') {
     event.preventDefault();
-    activate(event.shiftKey);
+    activate(intentFor(event));
   } else if (event.key === 'Escape') {
     event.preventDefault();
     window.close();
@@ -300,7 +329,7 @@ async function main() {
     const row = event.target.closest('.result');
     if (!row) return;
     select(rowEls.indexOf(row));
-    activate(event.shiftKey);
+    activate(intentFor(event));
   });
 
   // Normally replaced within milliseconds, but a very large bookmark tree or a
@@ -310,7 +339,10 @@ async function main() {
   try {
     const [items, state] = await Promise.all([readAll(), readBrowserState()]);
     mark('sources');
-    browserState = state;
+    // The window Ctrl+Enter targets is derived from the tabs just read rather
+    // than queried separately: neither the tabs nor the windows API reports
+    // window recency, and the tabs already carry the timestamps it needs.
+    browserState = { ...state, otherWindowId: mostRecentOtherWindow(items, state.currentWindowId) };
     index = buildIndex(items);
     mark('index');
     refresh();
