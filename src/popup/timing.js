@@ -63,16 +63,13 @@ function resourceLines() {
     `${label.padEnd(14)}${Math.round(from).toString().padStart(4)}` +
     ` -> ${Math.round(to).toString().padStart(4)} ms`;
 
+  // Chrome emits no ResourceTiming entries for chrome-extension:// subresources
+  // and forbids inline scripts on extension pages, so the module graph cannot
+  // be timed from within: all that can be said is when the document finished
+  // and when the first module ran.
   const [navigation] = performance.getEntriesByType('navigation');
   if (navigation) lines.push(at(navigation.startTime, navigation.responseEnd, 'document'));
-
-  // Chrome does not emit ResourceTiming entries for chrome-extension://
-  // subresources, so the stylesheet and the modules cannot be timed directly.
-  // The inline script in index.html stands in for the stylesheet, and whatever
-  // remains before the first mark is the module graph.
-  const cssReady = window.__cssReadyAt ?? 0;
-  lines.push(at(navigation?.responseEnd ?? 0, cssReady, 'stylesheet'));
-  lines.push(at(cssReady, marks.length > 0 ? marks[0].at : 0, 'modules'));
+  lines.push(at(navigation?.responseEnd ?? 0, marks.length > 0 ? marks[0].at : 0, 'modules'));
   return lines;
 }
 
