@@ -1,5 +1,5 @@
 // The SearchItem model: one normalized shape covering every searchable source
-// (open tabs now; bookmarks and history later), together with the pure
+// (open tabs and bookmarks now; history later), together with the pure
 // conversions into it from the raw shapes the Chrome APIs hand back. Nothing
 // here touches chrome.* — the conversions take plain objects so they can be
 // exercised from tests in Node.
@@ -11,26 +11,58 @@ export const KIND_TAB = 'tab';
 export const KIND_BOOKMARK = 'bookmark';
 
 /**
- * An item backed by a currently open tab.
+ * Fields every item carries, whatever its source.
  *
- * @typedef {Object} TabItem
- * @property {'tab'} kind
- * @property {string} key Unique across all sources, of the form `tab:<tabId>`.
- * @property {string} title Tab title; may be empty while a page is loading.
- * @property {string} url Full URL of the tab.
- * @property {number} lastUsed Epoch milliseconds of last access, or 0 if the
- *   running Chrome does not report it.
- * @property {number} tabId
- * @property {number} windowId Window the tab currently lives in.
- * @property {number} tabIndex Position of the tab within that window.
+ * @typedef {Object} ItemBase
+ * @property {string} key Unique across all sources, of the form `<kind>:<id>`.
+ * @property {string} title Human-readable name; may be empty while a page loads.
+ * @property {string} url Full URL, used for navigation and for deduplication.
+ * @property {string} display The URL as shown to the user and as matched
+ *   against — see {@link displayUrl}.
+ * @property {number} lastUsed Epoch milliseconds of last use, or 0 when the
+ *   source does not report it.
  */
 
 /**
- * Any searchable item. Currently only {@link TabItem}; bookmark and history
- * variants join this union in later milestones, each discriminated by `kind`.
+ * An item backed by a currently open tab.
  *
- * @typedef {TabItem} SearchItem
+ * @typedef {ItemBase & {kind: 'tab', tabId: number, windowId: number, tabIndex: number}} TabItem
  */
+
+/**
+ * An item backed by a bookmark.
+ *
+ * @typedef {ItemBase & {kind: 'bookmark', bookmarkId: string, folderPath: string}} BookmarkItem
+ */
+
+/**
+ * Any searchable item, discriminated by `kind`.
+ *
+ * @typedef {TabItem|BookmarkItem} SearchItem
+ */
+
+/**
+ * Shorten a URL for display and for matching.
+ *
+ * Drops the `http://` or `https://` scheme, a leading `www.`, and a lone
+ * trailing slash. This is cosmetic but it also sharpens search: without it,
+ * every candidate matches a query beginning `htt`, and `w` matches most of
+ * them.
+ *
+ * @param {string} url
+ * @returns {string} The shortened form. Non-web schemes such as `chrome://`
+ *   and `file://` are returned untouched, since there the scheme is the
+ *   informative part.
+ *
+ * Postconditions
+ * --------------
+ * The result is never longer than `url`, and is empty only if `url` is.
+ */
+export function displayUrl(url) {
+  const withoutScheme = url.replace(/^https?:\/\//i, '');
+  if (withoutScheme === url) return url;
+  return withoutScheme.replace(/^www\./i, '').replace(/\/$/, '');
+}
 
 /**
  * Convert a raw Chrome tab into a {@link TabItem}.
@@ -58,11 +90,13 @@ export function tabToItem(tab) {
   if (typeof tab.windowId !== 'number' || typeof tab.index !== 'number') {
     throw new TypeError(`tab ${tab.id} is missing windowId or index`);
   }
+  const url = tab.url ?? '';
   return Object.freeze({
     kind: KIND_TAB,
     key: `${KIND_TAB}:${tab.id}`,
     title: tab.title ?? '',
-    url: tab.url ?? '',
+    url,
+    display: displayUrl(url),
     lastUsed: tab.lastAccessed ?? 0,
     tabId: tab.id,
     windowId: tab.windowId,
@@ -71,20 +105,90 @@ export function tabToItem(tab) {
 }
 
 /**
+ * Convert a raw Chrome bookmark into a {@link BookmarkItem}.
+ *
+ * @param {Object} node A `chrome.bookmarks.BookmarkTreeNode`-shaped object.
+ * @param {string} [folderPath] Slash-joined titles of the enclosing folders,
+ *   for example `Bookmarks bar/Dev`. Empty for a bookmark at the root.
+ * @returns {BookmarkItem} A frozen item. `lastUsed` prefers `dateLastUsed`
+ *   and falls back to `dateAdded`, so that a bookmark never opened still
+ *   carries a plausible recency.
+ *
+ * Preconditions
+ * -------------
+ * `node.url` must be present — folders are not items, and callers are expected
+ * to have filtered them out (see {@link flattenBookmarks}).
+ *
+ * Throws
+ * ------
+ * TypeError
+ *     If `node.url` or `node.id` is missing.
+ */
+export function bookmarkToItem(node, folderPath = '') {
+  if (typeof node.id !== 'string') {
+    throw new TypeError(`bookmark is missing a string id: ${JSON.stringify(node)}`);
+  }
+  if (typeof node.url !== 'string') {
+    throw new TypeError(`bookmark ${node.id} has no url; folders are not items`);
+  }
+  return Object.freeze({
+    kind: KIND_BOOKMARK,
+    key: `${KIND_BOOKMARK}:${node.id}`,
+    title: node.title ?? '',
+    url: node.url,
+    display: displayUrl(node.url),
+    lastUsed: node.dateLastUsed ?? node.dateAdded ?? 0,
+    bookmarkId: node.id,
+    folderPath,
+  });
+}
+
+/**
+ * Walk a bookmark tree into a flat list of {@link BookmarkItem}.
+ *
+ * @param {Object[]} nodes `chrome.bookmarks.BookmarkTreeNode`-shaped objects,
+ *   as returned by `chrome.bookmarks.getTree`.
+ * @param {string} [folderPath] Path accumulated so far; callers pass nothing.
+ * @returns {BookmarkItem[]} Items in tree order. Folders contribute their
+ *   titles to the paths of their descendants but are not themselves items, and
+ *   the unnamed tree root contributes nothing.
+ */
+export function flattenBookmarks(nodes, folderPath = '') {
+  const items = [];
+  for (const node of nodes) {
+    if (typeof node.url === 'string') {
+      items.push(bookmarkToItem(node, folderPath));
+    } else if (node.children) {
+      const title = node.title ?? '';
+      const childPath = !title ? folderPath : folderPath ? `${folderPath}/${title}` : title;
+      items.push(...flattenBookmarks(node.children, childPath));
+    }
+  }
+  return items;
+}
+
+/**
  * Order items most-recently-used first.
  *
  * Intended as the comparator for `Array.prototype.sort`. Items with no recency
- * information (`lastUsed === 0`) sort last, and ties break on `title` so the
- * ordering is total and therefore stable across calls.
+ * information (`lastUsed === 0`) sort last, and ties break first on `title`,
+ * then on `key`.
+ *
+ * The final tie-break on `key` is arbitrary but total: `key` is unique by
+ * construction, so no two distinct items ever compare equal. Without it the
+ * result would depend on the order the sources happened to be read in, and the
+ * list could reshuffle under the user between keystrokes.
  *
  * @param {SearchItem} a
  * @param {SearchItem} b
- * @returns {number} Negative if `a` sorts before `b`, positive if after, 0 if
- *   the two are indistinguishable.
+ * @returns {number} Negative if `a` sorts before `b`, positive if after, 0 only
+ *   if `a` and `b` are the same item.
  */
 export function byRecencyDesc(a, b) {
   if (a.lastUsed !== b.lastUsed) {
     return b.lastUsed - a.lastUsed;
   }
-  return a.title.localeCompare(b.title);
+  const byTitle = a.title.localeCompare(b.title);
+  if (byTitle !== 0) return byTitle;
+  return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 }

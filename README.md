@@ -29,6 +29,7 @@ feasibility table, the decisions taken, and the milestone plan.
 | --- | --- |
 | [`src/`](src/) | The extension. Load this directory unpacked in `chrome://extensions`; there is no build step. |
 | [`tests/`](tests/) | Vitest unit tests for the pure core. |
+| [`bench/`](bench/) | Timings for the ranking path, which the "fast and responsive" requirement above needs checked rather than assumed. |
 | [`DESIGN.md`](DESIGN.md) | Design, platform constraints, and milestones. |
 
 ## Development
@@ -37,10 +38,12 @@ Load `src/` via **Load unpacked** in `chrome://extensions` with Developer mode
 on; after editing a file, press reload on the extension card. Rebind the
 shortcut (default `Ctrl+Shift+K`) at `chrome://extensions/shortcuts`.
 
-Node is needed only to run the tests, never to build or run the extension:
+Node is needed only to run the tests and benchmarks, never to build or run the
+extension:
 
 ```sh
 npm install
 npm test
+npm run bench
 ```
 

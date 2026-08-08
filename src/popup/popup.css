@@ -10,6 +10,7 @@
   --fg-dim: #5f6368;
   --border: #dadce0;
   --selected-bg: #e8f0fe;
+  --match-fg: #1967d2;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,6 +20,7 @@
     --fg-dim: #9aa0a6;
     --border: #3c4043;
     --selected-bg: #3c4043;
+    --match-fg: #8ab4f8;
   }
 }
 
@@ -80,9 +82,32 @@ body {
   text-overflow: ellipsis;
 }
 
+.result-sub {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+  font-size: 11px;
+}
+
+/* The source label keeps its full width; the URL is what gets ellipsized. */
+.result-kind {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg-dim);
+  font-size: 10px;
+}
+
 .result-url {
   color: var(--fg-dim);
-  font-size: 11px;
+}
+
+mark {
+  background: none;
+  color: var(--match-fg);
+  font-weight: 600;
 }
 
 .status {

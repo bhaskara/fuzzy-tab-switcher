@@ -93,8 +93,9 @@ src/                 <- Chrome loads this directory unpacked; there is no build 
   manifest.json
   core/              pure, no chrome.* — the whole test surface
     items.js         the SearchItem model + normalization from raw API shapes
-    fuzzy.js         score(query, text) -> {score, positions} | null
-    rank.js          items + query -> ordered, deduplicated results
+    fuzzy.js         score / positions, in prepared and convenience forms
+    highlight.js     text + matched indices -> runs, for rendering
+    rank.js          buildIndex(items) once; rank(index, query) per keystroke
     plan.js          (item, modifiers, browserState) -> Action
   adapters/          the only place chrome.* is touched
     source.js        tabs.query + bookmarks.getTree -> SearchItem[]
@@ -104,6 +105,7 @@ src/                 <- Chrome loads this directory unpacked; there is no build 
     popup.css
     main.js          wiring: read -> rank on keystroke -> render -> plan -> exec
 tests/               vitest; imports src/core/* directly
+bench/               timings for the ranking path; npm run bench
 ```
 
 **No build step.** The sources are plain ES modules that Chrome loads directly,
@@ -126,11 +128,27 @@ All of the branching in the spec — tab vs. bookmark, plain vs. `Shift`, and
 later split vs. not — becomes a pure function over a small truth table, testable
 exhaustively without a browser.
 
-**Fuzzy scoring is swappable.** `core/fuzzy.js` exposes a single
-`score(query, text)` returning a numeric score and the matched character
-positions (for highlighting), or `null` for no match. `rank.js` depends only on
-that signature, so the hand-rolled fzy-style scorer can be replaced by
-`fzf-for-js`, `uFuzzy`, or anything else by swapping one module.
+**Fuzzy scoring is swappable.** `core/fuzzy.js` exposes `score(query, text)`,
+returning a number or `null` for no match, and `positions(query, text)`,
+returning the matched character indices for highlighting. `rank.js` depends only
+on those, so the hand-rolled fzy-style scorer can be replaced by `fzf-for-js`,
+`uFuzzy`, or anything else by swapping one module. Each also has a "prepared"
+form used on the hot path, below.
+
+**Search is fast because of two decisions, both measured** (see
+[bench/README.md](bench/README.md); the first version cost 40ms per keystroke at
+5,000 items, which is enough to feel):
+
+- *Work that does not depend on the query happens once.* `buildIndex(items)`
+  deduplicates and pre-lowercases every candidate when the popup opens;
+  `rank(index, query)` then runs per keystroke. Worth ~1.5-2x.
+- *The scoring rows are reused, not reallocated.* Allocation, not arithmetic,
+  dominated the scorer. Worth ~15x, and the reason `core/` contains its one
+  piece of mutable state — documented at `scratch` in `fuzzy.js`.
+
+Ranking now costs ~3ms per keystroke at 5,000 items, so the popup re-ranks
+synchronously on every keystroke and does not debounce: debouncing at that cost
+would only add latency.
 
 ## 6. Milestones
 

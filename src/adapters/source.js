@@ -2,7 +2,7 @@
 // SearchItems. This module and its sibling exec.js are the only places in the
 // extension that touch chrome.*, which is what keeps src/core pure.
 
-import { tabToItem } from '../core/items.js';
+import { flattenBookmarks, tabToItem } from '../core/items.js';
 
 /**
  * Read every open tab, across all normal windows, as search items.
@@ -22,4 +22,35 @@ import { tabToItem } from '../core/items.js';
 export async function readTabs() {
   const tabs = await chrome.tabs.query({ windowType: 'normal' });
   return tabs.map(tabToItem);
+}
+
+/**
+ * Read every bookmark as search items.
+ *
+ * @returns {Promise<import('../core/items.js').BookmarkItem[]>} Items in tree
+ *   order. Folders are not included, but contribute to their descendants'
+ *   `folderPath`.
+ *
+ * Preconditions
+ * -------------
+ * The `"bookmarks"` permission must be granted, otherwise this rejects.
+ */
+export async function readBookmarks() {
+  const tree = await chrome.bookmarks.getTree();
+  return flattenBookmarks(tree);
+}
+
+/**
+ * Read every searchable item from every source.
+ *
+ * Sources are read concurrently, since the popup cannot show anything until
+ * all of them have answered.
+ *
+ * @returns {Promise<import('../core/items.js').SearchItem[]>} Tabs followed by
+ *   bookmarks, unranked and not yet deduplicated against each other — `rank`
+ *   does both.
+ */
+export async function readAll() {
+  const [tabs, bookmarks] = await Promise.all([readTabs(), readBookmarks()]);
+  return [...tabs, ...bookmarks];
 }

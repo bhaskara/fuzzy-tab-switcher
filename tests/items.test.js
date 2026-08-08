@@ -2,7 +2,15 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { KIND_TAB, byRecencyDesc, tabToItem } from '../src/core/items.js';
+import {
+  KIND_BOOKMARK,
+  KIND_TAB,
+  bookmarkToItem,
+  byRecencyDesc,
+  displayUrl,
+  flattenBookmarks,
+  tabToItem,
+} from '../src/core/items.js';
 
 /** A minimal valid `chrome.tabs.Tab`-shaped literal, overridable per test. */
 function rawTab(overrides = {}) {
@@ -24,6 +32,7 @@ describe('tabToItem', () => {
       key: 'tab:7',
       title: 'Example',
       url: 'https://example.com/',
+      display: 'example.com',
       lastUsed: 1000,
       tabId: 7,
       windowId: 2,
@@ -51,6 +60,103 @@ describe('tabToItem', () => {
     ['index', { index: undefined }],
   ])('rejects a tab missing %s rather than producing a broken item', (_field, missing) => {
     expect(() => tabToItem(rawTab(missing))).toThrow(TypeError);
+  });
+});
+
+describe('displayUrl', () => {
+  it.each([
+    ['https://example.com/', 'example.com'],
+    ['http://example.com/', 'example.com'],
+    ['https://www.example.com/', 'example.com'],
+    ['HTTPS://Example.com/', 'Example.com'],
+    ['https://example.com/a/b', 'example.com/a/b'],
+    ['https://example.com/a/', 'example.com/a'],
+    ['https://wwwx.example.com/', 'wwwx.example.com'],
+  ])('shortens %s to %s', (url, expected) => {
+    expect(displayUrl(url)).toBe(expected);
+  });
+
+  it.each([
+    ['chrome://extensions/', 'chrome://extensions/'],
+    ['file:///home/x/', 'file:///home/x/'],
+    ['', ''],
+  ])('leaves %s alone, where the scheme is the informative part', (url, expected) => {
+    expect(displayUrl(url)).toBe(expected);
+  });
+});
+
+describe('bookmarkToItem', () => {
+  it('copies the fields a bookmark needs to be opened', () => {
+    const node = {
+      id: 'b7',
+      title: 'Example',
+      url: 'https://example.com/',
+      dateAdded: 100,
+      dateLastUsed: 500,
+    };
+    expect(bookmarkToItem(node, 'Bookmarks bar/Dev')).toEqual({
+      kind: KIND_BOOKMARK,
+      key: 'bookmark:b7',
+      title: 'Example',
+      url: 'https://example.com/',
+      display: 'example.com',
+      lastUsed: 500,
+      bookmarkId: 'b7',
+      folderPath: 'Bookmarks bar/Dev',
+    });
+  });
+
+  it('falls back to dateAdded for a bookmark that was never opened', () => {
+    const node = { id: 'b1', title: 'x', url: 'https://x.test/', dateAdded: 100 };
+    expect(bookmarkToItem(node).lastUsed).toBe(100);
+  });
+
+  it('reports no recency when the bookmark carries neither date', () => {
+    expect(bookmarkToItem({ id: 'b1', title: 'x', url: 'https://x.test/' }).lastUsed).toBe(0);
+  });
+
+  it('rejects a folder, which is not an item', () => {
+    expect(() => bookmarkToItem({ id: 'f1', title: 'Folder' })).toThrow(TypeError);
+  });
+});
+
+describe('flattenBookmarks', () => {
+  /** A bookmark tree shaped like Chrome's: an unnamed root over named folders. */
+  const tree = [
+    {
+      id: '0',
+      title: '',
+      children: [
+        {
+          id: '1',
+          title: 'Bookmarks bar',
+          children: [
+            { id: '3', title: 'Top', url: 'https://top.test/' },
+            {
+              id: '4',
+              title: 'Dev',
+              children: [{ id: '5', title: 'Nested', url: 'https://nested.test/' }],
+            },
+          ],
+        },
+        { id: '2', title: 'Other bookmarks', children: [] },
+      ],
+    },
+  ];
+
+  it('returns every bookmark and no folders', () => {
+    expect(flattenBookmarks(tree).map((item) => item.title)).toEqual(['Top', 'Nested']);
+  });
+
+  it('records the enclosing folders, excluding the unnamed root', () => {
+    const paths = Object.fromEntries(
+      flattenBookmarks(tree).map((item) => [item.title, item.folderPath]),
+    );
+    expect(paths).toEqual({ Top: 'Bookmarks bar', Nested: 'Bookmarks bar/Dev' });
+  });
+
+  it('returns nothing for an empty tree', () => {
+    expect(flattenBookmarks([])).toEqual([]);
   });
 });
 

@@ -6,7 +6,8 @@ here and Chrome loads this directory directly via **Load unpacked** in
 file, press the reload button on the extension card.
 
 Everything here is plain ES modules with no dependencies. Node and vitest are
-development tooling for [`../tests/`](../tests/) only and never ship.
+development tooling for [`../tests/`](../tests/) and [`../bench/`](../bench/)
+only, and never ship.
 
 | Path | Contents |
 | --- | --- |
