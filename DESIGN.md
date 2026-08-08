@@ -38,8 +38,18 @@ query, fuzzy match score dominates and recency breaks ties.
 | Open tab | move the tab to the current window, just right of the active tab, then focus it | focus the tab where it already is, switching windows |
 | Bookmark | navigate the active tab to its URL | open it in a new tab |
 
+with one exception: a tab that is *already* in the current window is only
+focused, never moved. Moving it would drag it across to sit beside the active
+tab, silently rearranging a window the user can see, to no benefit.
+
 Neither path reloads an existing tab: `chrome.tabs.move` between two normal
 windows preserves the renderer, exactly as dragging the tab does.
+
+**Keys.** `Down`/`Up` and `Ctrl-N`/`Ctrl-P` move the selection, wrapping at both
+ends; `Enter` and `Shift+Enter` activate as above; `Escape` closes. Clicking a
+row activates it, with `Shift` held for the alternate behaviour. The popup knows
+about keys and `core/plan.js` does not: the popup maps `Shift` onto an
+`alternate` flag, so the truth table stays free of input concerns.
 
 **Deduplication.** A bookmark whose URL matches an open tab is collapsed into a
 single row that behaves as the tab (switching beats reloading). The row is
@@ -154,16 +164,17 @@ would only add latency.
 
 Each milestone ends in a commit.
 
-1. **Skeleton** — manifest, `_execute_action` command, popup that lists all open
-   tabs most-recently-used first, no filtering. Establishes the `core`/`adapters`
-   split and the item model.
-2. **Fuzzy search** — the fzy-style scorer, bookmarks as a second source,
-   ranking and deduplication, live narrowing with match highlighting. Unit tests
-   for `fuzzy.js` and `rank.js`.
-3. **Keyboard and activation** — full key handling, `plan.js` + `exec.js`, the
-   `Enter` / `Shift+Enter` table from §2. Unit tests for `plan.js`.
-4. **Polish** — favicons, source badges, window indicators, empty and error
-   states, popup sizing and scrolling.
+1. ~~**Skeleton**~~ *(done)* — manifest, `_execute_action` command, popup that
+   lists all open tabs most-recently-used first, no filtering. Establishes the
+   `core`/`adapters` split and the item model.
+2. ~~**Fuzzy search**~~ *(done)* — the fzy-style scorer, bookmarks as a second
+   source, ranking and deduplication, live narrowing with match highlighting.
+   Unit tests for `fuzzy.js` and `rank.js`.
+3. ~~**Keyboard and activation**~~ *(done)* — full key handling, `plan.js` +
+   `exec.js`, the `Enter` / `Shift+Enter` table from §2. Unit tests for
+   `plan.js`. The extension is usable from here on.
+4. **Polish** — favicons, window indicators, empty and error states, popup
+   sizing and scrolling.
 5. **Options** (optional) — scoring weights, `Enter` behaviour, sources enabled.
 6. **History source** (deferred) — `"history"` permission and a third source;
    the item model already accommodates it.

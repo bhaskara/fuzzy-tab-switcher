@@ -41,6 +41,32 @@ export async function readBookmarks() {
 }
 
 /**
+ * Read what `core/plan.js` needs to know about the browser.
+ *
+ * `currentWindow` resolves to the window the popup is anchored to, which is the
+ * window the user is looking at.
+ *
+ * @returns {Promise<import('../core/plan.js').BrowserState>}
+ *
+ * Throws
+ * ------
+ * Error
+ *     If the current window has no active tab, which should not happen while a
+ *     popup anchored to that window is open.
+ */
+export async function readBrowserState() {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!activeTab) {
+    throw new Error('the current window has no active tab');
+  }
+  return {
+    currentWindowId: activeTab.windowId,
+    activeTabId: activeTab.id,
+    activeTabIndex: activeTab.index,
+  };
+}
+
+/**
  * Read every searchable item from every source.
  *
  * Sources are read concurrently, since the popup cannot show anything until
