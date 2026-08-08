@@ -4,6 +4,27 @@
     <meta charset="utf-8" />
     <title>Switch to</title>
     <link rel="stylesheet" href="popup.css" />
+
+    <!-- Diagnostic, see popup/timing.js. A script must wait for pending
+         stylesheets before it runs, so this records when the stylesheet
+         stopped blocking, separating its cost from the modules'. -->
+    <script>
+      window.__cssReadyAt = performance.now();
+    </script>
+
+    <!-- Without these the browser cannot discover a module until it has
+         fetched and parsed whichever module imports it, so the graph loads as a
+         waterfall. Preloading starts every fetch while the HTML is still being
+         parsed. Keep in step with the imports in main.js. -->
+    <link rel="modulepreload" href="main.js" />
+    <link rel="modulepreload" href="timing.js" />
+    <link rel="modulepreload" href="../adapters/exec.js" />
+    <link rel="modulepreload" href="../adapters/source.js" />
+    <link rel="modulepreload" href="../core/fuzzy.js" />
+    <link rel="modulepreload" href="../core/highlight.js" />
+    <link rel="modulepreload" href="../core/items.js" />
+    <link rel="modulepreload" href="../core/plan.js" />
+    <link rel="modulepreload" href="../core/rank.js" />
   </head>
   <body>
     <input
