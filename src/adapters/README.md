@@ -7,8 +7,8 @@ that little logic is stranded outside the tests.
 
 | Module | Direction | Contents |
 | --- | --- | --- |
-| `source.js` | read | `chrome.tabs.query` and `chrome.bookmarks.getTree` to `SearchItem[]`, plus the current window and active tab that actions are planned against. |
-| `exec.js` | write | Performs the `Action` values produced by `core/plan.js` — `chrome.tabs.move`, `update`, `create`, and `chrome.windows.update`. |
+| `source.js` | read | `chrome.tabs.query`, `chrome.bookmarks.getTree` and `chrome.sessions.getRecentlyClosed` to `SearchItem[]`, plus the current window and active tab that actions are planned against. |
+| `exec.js` | write | Performs the `Action` values produced by `core/plan.js` — `chrome.tabs.move`, `update`, `create`, `chrome.windows.update` and `chrome.sessions.restore`. Returns the reopened tab after a restore, so the caller can plan a follow-up against it. |
 
 Neither module catches anything. Chrome refuses several moves — across the
 incognito boundary, or to or from a window that is not a normal one — and the

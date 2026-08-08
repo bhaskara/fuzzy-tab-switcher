@@ -2,7 +2,7 @@
 // SearchItems. This module and its sibling exec.js are the only places in the
 // extension that touch chrome.*, which is what keeps src/core pure.
 
-import { flattenBookmarks, tabToItem } from '../core/items.js';
+import { closedTabToItem, flattenBookmarks, tabToItem } from '../core/items.js';
 
 /**
  * Read every open tab, across all normal windows, as search items.
@@ -41,6 +41,29 @@ export async function readBookmarks() {
 }
 
 /**
+ * Read recently closed tabs as search items.
+ *
+ * Chrome caps this list at `chrome.sessions.MAX_SESSION_RESULTS` (25) entries,
+ * so it reaches back minutes or hours, not days. Deeper reach would mean the
+ * history API, which is a different thing: history entries are bare URLs with
+ * no state to restore.
+ *
+ * Sessions describing a closed *window* are skipped rather than flattened into
+ * their tabs — see the note in ../../DESIGN.md §8.
+ *
+ * @returns {Promise<import('../core/items.js').ClosedTabItem[]>} Most recently
+ *   closed first, as Chrome returns them.
+ *
+ * Preconditions
+ * -------------
+ * The `"sessions"` permission must be granted, otherwise this rejects.
+ */
+export async function readRecentlyClosed() {
+  const sessions = await chrome.sessions.getRecentlyClosed();
+  return sessions.filter((session) => session.tab !== undefined).map(closedTabToItem);
+}
+
+/**
  * Read what `core/plan.js` needs to know about the browser.
  *
  * `currentWindow` resolves to the window the popup is anchored to, which is the
@@ -72,11 +95,15 @@ export async function readBrowserState() {
  * Sources are read concurrently, since the popup cannot show anything until
  * all of them have answered.
  *
- * @returns {Promise<import('../core/items.js').SearchItem[]>} Tabs followed by
- *   bookmarks, unranked and not yet deduplicated against each other — `rank`
- *   does both.
+ * @returns {Promise<import('../core/items.js').SearchItem[]>} Tabs, then
+ *   recently closed tabs, then bookmarks — unranked and not yet deduplicated
+ *   against each other, which `buildIndex` does.
  */
 export async function readAll() {
-  const [tabs, bookmarks] = await Promise.all([readTabs(), readBookmarks()]);
-  return [...tabs, ...bookmarks];
+  const [tabs, closed, bookmarks] = await Promise.all([
+    readTabs(),
+    readRecentlyClosed(),
+    readBookmarks(),
+  ]);
+  return [...tabs, ...closed, ...bookmarks];
 }

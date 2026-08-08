@@ -7,7 +7,7 @@ import { execute } from '../adapters/exec.js';
 import { readAll, readBrowserState } from '../adapters/source.js';
 import { positions } from '../core/fuzzy.js';
 import { toSegments } from '../core/highlight.js';
-import { KIND_TAB } from '../core/items.js';
+import { KIND_CLOSED_TAB, KIND_TAB, tabToItem } from '../core/items.js';
 import { plan } from '../core/plan.js';
 import { buildIndex, rank } from '../core/rank.js';
 import { mark, report } from './timing.js';
@@ -96,6 +96,7 @@ function isElsewhere(item) {
  * @returns {string}
  */
 function kindLabel(item) {
+  if (item.kind === KIND_CLOSED_TAB) return 'recently closed';
   if (item.kind !== KIND_TAB) return item.folderPath || 'bookmark';
   return isElsewhere(item) ? 'other window' : 'tab';
 }
@@ -243,8 +244,16 @@ function refresh() {
 async function activate(alternate) {
   const entry = shown[selected];
   if (!entry || browserState === null) return;
+  const modifiers = { alternate };
   try {
-    await execute(plan(entry.item, { alternate }, browserState));
+    const restored = await execute(plan(entry.item, modifiers, browserState));
+    // Restoring a closed tab only reopens it; Chrome decides which window it
+    // lands in, and that is not knowable until it has. Planning a second action
+    // against the reopened tab is what makes a restored tab behave like any
+    // other tab — brought here on Enter, left in place on Shift+Enter.
+    if (restored !== null) {
+      await execute(plan(tabToItem(restored), modifiers, browserState));
+    }
   } catch (err) {
     // Chrome refuses some moves — across the incognito boundary, for instance.
     // Say so and stay open rather than closing as though it had worked.

@@ -6,6 +6,7 @@
   "permissions": [
     "tabs",
     "bookmarks",
+    "sessions",
     "favicon"
   ],
   "action": {

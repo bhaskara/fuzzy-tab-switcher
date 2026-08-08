@@ -6,6 +6,9 @@ The basic command is switch-to.  The idea is when this is invoked (using some cu
 1. It uses fuzzy matching, rather than just matching on the prefix of the name.  
 2. It searches over currently open tabs (across all windows) as well as bookmark items (and in future maybe recent history items as well).
 
+(Recently closed tabs are searched too, and restoring one brings back its
+back/forward history. See [DESIGN.md](DESIGN.md) §2.)
+
 Like with the usual "search tabs", as the user types the set of options narrows.  This needs to be fast and responsive.  At any point the user can use arrow keys to move between the current options and can hit enter to choose one.
 
 Now, once an option is selected, there are a few possibilities for what happens.  Let's start with the case where we're not in tab split view.

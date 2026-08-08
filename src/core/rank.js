@@ -6,7 +6,32 @@
 // keystroke. See ../../DESIGN.md §5.
 
 import { prepareQuery, prepareText, scorePrepared } from './fuzzy.js';
-import { KIND_TAB, byRecencyDesc } from './items.js';
+import { KIND_BOOKMARK, KIND_CLOSED_TAB, KIND_TAB, byRecencyDesc } from './items.js';
+
+/**
+ * Which kind wins when two items point at the same page, best first.
+ *
+ * Switching to an open tab beats restoring a closed one, which beats loading
+ * the page fresh from a bookmark: each keeps strictly more of the page's state
+ * than the next. Showing all three would be three rows that look identical and
+ * behave differently.
+ */
+const KIND_PRECEDENCE = [KIND_TAB, KIND_CLOSED_TAB, KIND_BOOKMARK];
+
+/**
+ * Position of `kind` in {@link KIND_PRECEDENCE}, lower being better.
+ *
+ * A kind not in the list sorts last rather than first, so that adding a source
+ * and forgetting to rank it makes that source lose ties instead of silently
+ * suppressing open tabs.
+ *
+ * @param {string} kind
+ * @returns {number}
+ */
+function precedenceOf(kind) {
+  const rank = KIND_PRECEDENCE.indexOf(kind);
+  return rank === -1 ? Number.POSITIVE_INFINITY : rank;
+}
 
 /**
  * Added to a title's score before comparing it with the same item's URL score.
@@ -53,28 +78,35 @@ function dedupeKey(url) {
 /**
  * Build the searchable index the popup queries on every keystroke.
  *
- * Does the two things that do not depend on the query. First, drops bookmarks
- * that duplicate an open tab: a bookmark for a page that is already open should
- * offer to switch to the tab rather than reload the page over it, so the tab
- * wins. Second, prepares each surviving item's title and URL for matching.
+ * Does the two things that do not depend on the query. First, collapses items
+ * that point at the same page down to the one that preserves the most state,
+ * per {@link KIND_PRECEDENCE}. Second, prepares each surviving item's title and
+ * URL for matching.
  *
  * @param {import('./items.js').SearchItem[]} items Every candidate, in any
- *   order — typically every open tab followed by every bookmark.
+ *   order — typically open tabs, then recently closed tabs, then bookmarks.
  * @returns {Candidate[]} A new array, input order preserved.
  *
  * Postconditions
  * --------------
- * No bookmark in the result shares a URL with a tab in `items`. Two tabs
- * showing the same page both survive, since either can be switched to.
+ * For any URL, no item of a kind later in {@link KIND_PRECEDENCE} survives if
+ * an item of an earlier kind shares that URL. Two items of the *same* kind
+ * sharing a URL both survive: two tabs showing one page are two things a user
+ * can switch between, and two bookmarks of it are two entries they made.
  */
 export function buildIndex(items) {
-  const openUrls = new Set();
+  // The best kind seen for each URL, as an index into KIND_PRECEDENCE.
+  const bestRank = new Map();
   for (const item of items) {
-    if (item.kind === KIND_TAB) openUrls.add(dedupeKey(item.url));
+    const rank = precedenceOf(item.kind);
+    const key = dedupeKey(item.url);
+    const seen = bestRank.get(key);
+    if (seen === undefined || rank < seen) bestRank.set(key, rank);
   }
+
   const candidates = [];
   for (const item of items) {
-    if (item.kind !== KIND_TAB && openUrls.has(dedupeKey(item.url))) continue;
+    if (precedenceOf(item.kind) > bestRank.get(dedupeKey(item.url))) continue;
     candidates.push({
       item,
       title: prepareText(item.title),

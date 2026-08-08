@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { bookmarkToItem, tabToItem } from '../src/core/items.js';
+import { bookmarkToItem, closedTabToItem, tabToItem } from '../src/core/items.js';
 import { plan } from '../src/core/plan.js';
 
 /** The window the popup belongs to, with its active tab third from the left. */
@@ -90,6 +90,46 @@ describe('plan for a bookmark', () => {
     const item = bookmark({ url: 'https://www.example.org/' });
     expect(item.display).toBe('example.org');
     expect(plan(item, PLAIN, STATE).url).toBe('https://www.example.org/');
+  });
+});
+
+describe('plan for a recently closed tab', () => {
+  const item = closedTabToItem({
+    lastModified: 1_700_000_000,
+    tab: { sessionId: 's42', title: 'Closed', url: 'https://example.com/gone' },
+  });
+
+  it('restores it', () => {
+    expect(plan(item, PLAIN, STATE)).toEqual({ type: 'restoreSession', sessionId: 's42' });
+  });
+
+  it('restores it the same way under alternate', () => {
+    // Restoring is only half the job. Where Chrome reopens the tab is not
+    // knowable until it has, so the caller restores and then plans a second
+    // action against the reopened tab — and that is where alternate applies.
+    expect(plan(item, ALTERNATE, STATE)).toEqual(plan(item, PLAIN, STATE));
+  });
+
+  it('hands the reopened tab back to the open-tab rules, whichever window it lands in', () => {
+    // The second half of the sequence, as popup/main.js performs it.
+    const reopenedElsewhere = tabToItem({
+      id: 77,
+      windowId: 9,
+      index: 0,
+      title: 'Closed',
+      url: 'https://example.com/gone',
+    });
+    expect(plan(reopenedElsewhere, PLAIN, STATE)).toEqual({
+      type: 'moveAndFocus',
+      tabId: 77,
+      toWindowId: 1,
+      index: 3,
+    });
+    expect(plan(reopenedElsewhere, ALTERNATE, STATE)).toEqual({
+      type: 'focusTab',
+      tabId: 77,
+      windowId: 9,
+    });
   });
 });
 

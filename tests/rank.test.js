@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { bookmarkToItem, tabToItem } from '../src/core/items.js';
+import { bookmarkToItem, closedTabToItem, tabToItem } from '../src/core/items.js';
 import { buildIndex, rank } from '../src/core/rank.js';
 
 /** A tab item, from a few readable fields. */
@@ -13,6 +13,11 @@ function tab({ id = 1, title = 'Tab', url = 'https://example.com/', lastAccessed
 /** A bookmark item, from a few readable fields. */
 function bookmark({ id = 'b1', title = 'Bookmark', url = 'https://example.org/', dateAdded = 0 } = {}) {
   return bookmarkToItem({ id, title, url, dateAdded });
+}
+
+/** A recently closed tab item. */
+function closed({ id = 's1', title = 'Closed', url = 'https://example.net/', lastModified = 0 } = {}) {
+  return closedTabToItem({ lastModified, tab: { sessionId: id, title, url } });
 }
 
 /** Build an index and rank in one step, as the popup does across two phases. */
@@ -131,5 +136,48 @@ describe('rank deduplication', () => {
       tab({ id: 2, title: 'Second', url: 'https://example.com/' }),
     ];
     expect(rankedTitles(items, '')).toHaveLength(2);
+  });
+
+  it('collapses one page to the kind that preserves the most state', () => {
+    // Switching keeps everything, restoring keeps the back/forward history,
+    // loading a bookmark keeps nothing — so the open tab is the only survivor.
+    const url = 'https://example.com/same';
+    const items = [
+      bookmark({ id: 'b1', title: 'Bookmarked', url }),
+      closed({ id: 's1', title: 'Closed', url }),
+      tab({ id: 1, title: 'Open', url }),
+    ];
+    expect(rankedTitles(items, '')).toEqual(['Open']);
+  });
+
+  it('prefers restoring a closed tab to reloading a bookmark of the same page', () => {
+    const url = 'https://example.com/same';
+    const items = [
+      bookmark({ id: 'b1', title: 'Bookmarked', url }),
+      closed({ id: 's1', title: 'Closed', url }),
+    ];
+    expect(rankedTitles(items, '')).toEqual(['Closed']);
+  });
+
+  it('drops a closed tab for a page that has since been reopened', () => {
+    const url = 'https://example.com/same';
+    const items = [tab({ id: 1, title: 'Open again', url }), closed({ id: 's1', url })];
+    expect(rankedTitles(items, '')).toEqual(['Open again']);
+  });
+
+  it('keeps a closed tab for a page that is neither open nor bookmarked', () => {
+    const items = [
+      tab({ id: 1, title: 'Open', url: 'https://a.test/' }),
+      closed({ id: 's1', title: 'Closed', url: 'https://b.test/' }),
+    ];
+    expect(rankedTitles(items, '').toSorted()).toEqual(['Closed', 'Open']);
+  });
+
+  it('lets an unranked future kind lose ties rather than suppress open tabs', () => {
+    // A source added without being listed in KIND_PRECEDENCE must not silently
+    // outrank everything; it sorts last, so the open tab still wins.
+    const url = 'https://example.com/same';
+    const alien = { kind: 'history', key: 'history:1', title: 'History', url, display: url, lastUsed: 0 };
+    expect(rankedTitles([alien, tab({ id: 1, title: 'Open', url })], '')).toEqual(['Open']);
   });
 });

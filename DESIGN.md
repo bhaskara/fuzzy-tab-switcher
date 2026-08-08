@@ -14,6 +14,7 @@ into an existing split view**, which has no API (see §3).
 | Custom keyboard shortcut opens a popup | `chrome.commands` reserved `_execute_action` | supported, user-rebindable at `chrome://extensions/shortcuts` |
 | Search open tabs across all windows | `chrome.tabs.query({})`, `"tabs"` permission | supported |
 | Search bookmarks | `chrome.bookmarks.getTree()`, `"bookmarks"` permission | supported |
+| Search recently closed tabs | `chrome.sessions.getRecentlyClosed()`, `"sessions"` permission | supported; capped at 25 entries by `MAX_SESSION_RESULTS` |
 | Fuzzy match, narrowing as you type | pure JS in the popup | supported; ~5k items score in a few ms |
 | Move an open tab to the current window, no reload | `chrome.tabs.move` then `chrome.tabs.update({active:true})` | supported; equivalent to dragging the tab, renderer is preserved |
 | Bookmark navigates the current tab | `chrome.tabs.update(activeTabId, {url})` | supported |
@@ -37,6 +38,7 @@ query, fuzzy match score dominates and recency breaks ties.
 | --- | --- | --- |
 | Open tab | move the tab to the current window, just right of the active tab, then focus it | focus the tab where it already is, switching windows |
 | Bookmark | navigate the active tab to its URL | open it in a new tab |
+| Recently closed tab | restore it, then bring it here and focus it | restore it, then focus it where it landed |
 
 with one exception: a tab that is *already* in the current window is only
 focused, never moved. Moving it would drag it across to sit beside the active
@@ -51,12 +53,26 @@ row activates it, with `Shift` held for the alternate behaviour. The popup knows
 about keys and `core/plan.js` does not: the popup maps `Shift` onto an
 `alternate` flag, so the truth table stays free of input concerns.
 
-**Deduplication.** A bookmark whose URL matches an open tab is collapsed into a
-single row that behaves as the tab (switching beats reloading). The row is
-labelled as a tab.
+**Restoring is two steps.** `chrome.sessions.restore` reopens a tab with its
+back and forward history intact — the whole advantage over loading the same URL
+fresh — but Chrome decides which window it lands in, and that is not knowable
+until it has. So `plan` returns a bare `restoreSession` action, the popup
+performs it, and then plans a *second* action against the reopened tab, at which
+point the open-tab row above applies unchanged. A restored tab therefore behaves
+exactly like any other tab without `plan` having to predict where it will be.
+
+**Deduplication.** Items pointing at the same page collapse to the one that
+preserves the most state: an open tab beats a recently closed one, which beats a
+bookmark. Switching keeps everything, restoring keeps the session history,
+loading a bookmark keeps nothing. Two items of the *same* kind survive — two
+tabs showing one page are two things to switch between, and two bookmarks of it
+are two entries the user made. A kind missing from that ordering sorts last
+rather than first, so adding a source and forgetting to rank it makes the new
+source lose ties instead of silently hiding open tabs.
 
 **Row anatomy.** Each row carries Chrome's cached favicon, the title, and a
-label plus the shortened URL. The label reads `tab`, the bookmark's folder path,
+label plus the shortened URL. The label reads `tab`, `recently closed`, the
+bookmark's folder path,
 or — for a tab living in another window — `other window`, highlighted rather
 than muted because that is the one case where activating does something beyond
 switching. Both text lines are ellipsized rather than wrapped, so row heights
@@ -234,8 +250,32 @@ Each milestone ends in a commit.
    `plan.js`. The extension is usable from here on.
 4. ~~**Polish**~~ *(done)* — favicons, a marker on tabs living in another
    window, empty and error states, popup sizing and scrolling.
-5. **Options** (optional) — scoring weights, `Enter` behaviour, sources enabled.
-6. **History source** (deferred) — `"history"` permission and a third source;
-   the item model already accommodates it.
+5. ~~**Recently closed tabs**~~ *(done)* — `"sessions"` permission, a third
+   source, restore-then-focus, and deduplication by state preserved.
+6. **Options** (optional) — scoring weights, `Enter` behaviour, sources enabled.
 
-Split view stays out until the upstream API exists.
+## 8. Deferred and future work
+
+Nothing here is blocking; each is recorded so the reasoning is not re-derived.
+
+- **Split view.** No API exists to move a tab into one. See §3.
+- **Closed *windows*.** `chrome.sessions.getRecentlyClosed` returns sessions
+  that are either a tab or a whole window, and `adapters/source.js` currently
+  skips the window ones. Whether they can be flattened into individually
+  restorable tabs depends on whether tabs inside a closed window carry their own
+  `sessionId`, which the API reference does not say — that needs checking in a
+  browser before the shape of the feature can be decided. A window that can only
+  be restored whole is a different sort of row from everything else in the list.
+- **History as a source.** `"history"` permission and `chrome.history.search`.
+  The item model accommodates it, and `KIND_PRECEDENCE` in `rank.js` is where it
+  would slot in — below recently closed, since a history entry is a bare URL
+  with no state to restore. Worth having because recently closed is capped at 25
+  entries and so reaches back minutes, not days.
+- **Tabs on other synced devices.** `chrome.sessions.getDevices()`, same
+  permission already granted, same item model. Activating one would have to open
+  the URL rather than restore, since the tab is on another machine.
+- **Publishing to the Chrome Web Store.** Assessed and deferred. The gaps were:
+  no icons in the manifest, no `minimum_chrome_version` (MRU silently needs
+  Chrome 121), incognito tabs appearing when the extension is allowed in
+  incognito and then failing to move, and bookmarked `chrome://` pages which
+  `tabs.update` may refuse to navigate to.

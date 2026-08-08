@@ -10,6 +10,9 @@ export const KIND_TAB = 'tab';
 /** Discriminator for items backed by a bookmark. */
 export const KIND_BOOKMARK = 'bookmark';
 
+/** Discriminator for items backed by a recently closed tab. */
+export const KIND_CLOSED_TAB = 'closed';
+
 /**
  * Fields every item carries, whatever its source.
  *
@@ -36,9 +39,15 @@ export const KIND_BOOKMARK = 'bookmark';
  */
 
 /**
+ * An item backed by a tab that was recently closed and can be restored.
+ *
+ * @typedef {ItemBase & {kind: 'closed', sessionId: string}} ClosedTabItem
+ */
+
+/**
  * Any searchable item, discriminated by `kind`.
  *
- * @typedef {TabItem|BookmarkItem} SearchItem
+ * @typedef {TabItem|BookmarkItem|ClosedTabItem} SearchItem
  */
 
 /**
@@ -140,6 +149,52 @@ export function bookmarkToItem(node, folderPath = '') {
     lastUsed: node.dateLastUsed ?? node.dateAdded ?? 0,
     bookmarkId: node.id,
     folderPath,
+  });
+}
+
+/**
+ * Convert a recently closed session into a {@link ClosedTabItem}.
+ *
+ * @param {Object} session A `chrome.sessions.Session`-shaped object whose `tab`
+ *   is set. Sessions describing a closed *window* are not items and must be
+ *   filtered out by the caller.
+ * @returns {ClosedTabItem} A frozen item.
+ *
+ * Preconditions
+ * -------------
+ * `session.tab.sessionId` must be present. The tab's own `id` is deliberately
+ * ignored: a closed tab's `id` is `chrome.tabs.TAB_ID_NONE`, and only the
+ * session id can restore it.
+ *
+ * Notes
+ * -----
+ * `Session.lastModified` is in **seconds** since the epoch, unlike every other
+ * timestamp the Chrome extension APIs hand us, so it is scaled to milliseconds
+ * here to match `lastUsed` everywhere else. Skipping that would silently sort
+ * every closed tab as though it were from 1970.
+ *
+ * Throws
+ * ------
+ * TypeError
+ *     If the session has no tab, or that tab has no session id.
+ */
+export function closedTabToItem(session) {
+  const tab = session.tab;
+  if (!tab) {
+    throw new TypeError('session describes a closed window, which is not an item');
+  }
+  if (typeof tab.sessionId !== 'string') {
+    throw new TypeError(`closed tab has no sessionId: ${JSON.stringify(tab)}`);
+  }
+  const url = tab.url ?? '';
+  return Object.freeze({
+    kind: KIND_CLOSED_TAB,
+    key: `${KIND_CLOSED_TAB}:${tab.sessionId}`,
+    title: tab.title ?? '',
+    url,
+    display: displayUrl(url),
+    lastUsed: (session.lastModified ?? 0) * 1000,
+    sessionId: tab.sessionId,
   });
 }
 

@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   KIND_BOOKMARK,
+  KIND_CLOSED_TAB,
   KIND_TAB,
   bookmarkToItem,
   byRecencyDesc,
+  closedTabToItem,
   displayUrl,
   flattenBookmarks,
   tabToItem,
@@ -117,6 +119,77 @@ describe('bookmarkToItem', () => {
 
   it('rejects a folder, which is not an item', () => {
     expect(() => bookmarkToItem({ id: 'f1', title: 'Folder' })).toThrow(TypeError);
+  });
+});
+
+describe('closedTabToItem', () => {
+  /** A `chrome.sessions.Session` for a closed tab, as Chrome shapes it. */
+  function session(overrides = {}) {
+    return {
+      lastModified: 1_700_000_000,
+      tab: {
+        // A closed tab's own id is TAB_ID_NONE; only sessionId can restore it.
+        id: -1,
+        sessionId: 's42',
+        title: 'Closed page',
+        url: 'https://example.com/gone',
+        ...overrides.tab,
+      },
+      ...overrides,
+    };
+  }
+
+  it('copies the fields a closed tab needs to be restored', () => {
+    expect(closedTabToItem(session())).toEqual({
+      kind: KIND_CLOSED_TAB,
+      key: 'closed:s42',
+      title: 'Closed page',
+      url: 'https://example.com/gone',
+      display: 'example.com/gone',
+      lastUsed: 1_700_000_000_000,
+      sessionId: 's42',
+    });
+  });
+
+  it('converts lastModified from seconds to milliseconds', () => {
+    // The sessions API reports seconds; every other timestamp in the model is
+    // milliseconds. Left unscaled, every closed tab would sort as 1970 and
+    // never appear near the top of the most-recently-used list.
+    const item = closedTabToItem(session({ lastModified: 1_700_000_000 }));
+    const tab = tabToItem({
+      id: 1,
+      windowId: 1,
+      index: 0,
+      title: 'Open',
+      url: 'https://open.test/',
+      lastAccessed: 1_700_000_001_000,
+    });
+    // One second younger, so the open tab sorts first — not 53 years first.
+    expect([item, tab].toSorted(byRecencyDesc).map((i) => i.kind)).toEqual([
+      KIND_TAB,
+      KIND_CLOSED_TAB,
+    ]);
+    expect(tab.lastUsed - item.lastUsed).toBe(1000);
+  });
+
+  it('reports no recency when the session carries no timestamp', () => {
+    expect(closedTabToItem(session({ lastModified: undefined })).lastUsed).toBe(0);
+  });
+
+  it('normalizes a closed tab with no title or url to empty strings', () => {
+    const item = closedTabToItem(session({ tab: { sessionId: 's1' } }));
+    expect(item.title).toBe('');
+    expect(item.url).toBe('');
+  });
+
+  it('rejects a session describing a closed window, which is not an item', () => {
+    expect(() => closedTabToItem({ lastModified: 1, window: { tabs: [] } })).toThrow(TypeError);
+  });
+
+  it('rejects a closed tab with no session id, which could not be restored', () => {
+    expect(() => closedTabToItem({ lastModified: 1, tab: { url: 'https://x.test/' } })).toThrow(
+      TypeError,
+    );
   });
 });
 

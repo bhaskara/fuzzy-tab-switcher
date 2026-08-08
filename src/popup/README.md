@@ -14,8 +14,8 @@ bookmarks.
 | Key | Does |
 | --- | --- |
 | `Down` / `Up`, `Ctrl-N` / `Ctrl-P` | Move the selection, wrapping at both ends. |
-| `Enter` | Move the selected tab to this window and focus it, or navigate this tab to the selected bookmark. |
-| `Shift+Enter` | Focus the selected tab where it already is, or open the selected bookmark in a new tab. |
+| `Enter` | Move the selected tab to this window and focus it, navigate this tab to the selected bookmark, or restore the selected closed tab and bring it here. |
+| `Shift+Enter` | Focus the selected tab where it already is, open the selected bookmark in a new tab, or restore the selected closed tab where it landed. |
 | `Escape` | Close. |
 
 Clicking a row activates it, with `Shift` held for the alternate behaviour.

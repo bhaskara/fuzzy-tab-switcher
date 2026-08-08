@@ -11,9 +11,12 @@
  * appear to have done nothing.
  *
  * @param {import('../core/plan.js').Action} action As returned by `plan`.
- * @returns {Promise<void>} Resolves once the browser has applied the action.
- *   May not resolve at all in practice: focusing another window closes the
- *   popup, which tears down the context this is running in.
+ * @returns {Promise<Object|null>} A `chrome.tabs.Tab`-shaped object for
+ *   `restoreSession`, describing where the tab was reopened, so the caller can
+ *   plan a follow-up action against it; null for every other action. Resolves
+ *   once the browser has applied the action — though it may not resolve at all
+ *   in practice, since focusing another window closes the popup and tears down
+ *   the context this is running in.
  *
  * Throws
  * ------
@@ -27,7 +30,16 @@ export async function execute(action) {
       // active in the target window first, which reads as a visible flicker.
       await chrome.tabs.update(action.tabId, { active: true });
       await chrome.windows.update(action.windowId, { focused: true });
-      return;
+      return null;
+
+    case 'restoreSession': {
+      // Restoring reopens the tab with its back/forward history intact, which
+      // is the whole advantage over loading the same URL fresh. Chrome decides
+      // where it lands, so the reopened tab is handed back for the caller to
+      // plan against rather than acted on here.
+      const session = await chrome.sessions.restore(action.sessionId);
+      return session?.tab ?? null;
+    }
 
     case 'moveAndFocus':
       // Moving a tab between two normal windows preserves its renderer, exactly
@@ -38,15 +50,15 @@ export async function execute(action) {
         index: action.index,
       });
       await chrome.tabs.update(action.tabId, { active: true });
-      return;
+      return null;
 
     case 'navigateActive':
       await chrome.tabs.update(action.tabId, { url: action.url });
-      return;
+      return null;
 
     case 'openNewTab':
       await chrome.tabs.create({ url: action.url, windowId: action.windowId });
-      return;
+      return null;
 
     default:
       throw new TypeError(`unknown action type ${JSON.stringify(action.type)}`);

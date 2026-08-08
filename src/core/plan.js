@@ -7,7 +7,7 @@
 // versus not — is therefore a pure function over a small truth table that can
 // be tested exhaustively with no browser.
 
-import { KIND_BOOKMARK, KIND_TAB } from './items.js';
+import { KIND_BOOKMARK, KIND_CLOSED_TAB, KIND_TAB } from './items.js';
 
 /**
  * What the popup knows about the browser when the user activates a result.
@@ -37,7 +37,8 @@ import { KIND_BOOKMARK, KIND_TAB } from './items.js';
  * @typedef {{type: 'focusTab', tabId: number, windowId: number}
  *   | {type: 'moveAndFocus', tabId: number, toWindowId: number, index: number}
  *   | {type: 'navigateActive', tabId: number, url: string}
- *   | {type: 'openNewTab', url: string, windowId: number}} Action
+ *   | {type: 'openNewTab', url: string, windowId: number}
+ *   | {type: 'restoreSession', sessionId: string}} Action
  */
 
 /**
@@ -49,10 +50,19 @@ import { KIND_BOOKMARK, KIND_TAB } from './items.js';
  * | --- | --- | --- |
  * | open tab | move it to the current window, just right of the active tab, and focus it | focus it where it already is, switching windows |
  * | bookmark | navigate the active tab to it | open it in a new tab |
+ * | recently closed tab | restore it | restore it |
  *
  * with one exception: a tab that is *already* in the current window is only
  * focused, never moved. Moving it would drag it across to sit beside the active
  * tab, silently rearranging a window the user can see, to no benefit.
+ *
+ * Restoring ignores `alternate` because restoring is only half the job: where
+ * Chrome reopens the tab is not knowable until it has done so. The caller
+ * restores, then plans a *second* action from the reopened tab, at which point
+ * the open-tab row above applies and `alternate` does its usual work. So plain
+ * activation still brings the tab to the current window and alternate still
+ * leaves it where it landed, without this function having to predict where
+ * that is.
  *
  * @param {import('./items.js').SearchItem} item The activated item.
  * @param {Modifiers} modifiers
@@ -75,6 +85,10 @@ export function plan(item, modifiers, state) {
       toWindowId: state.currentWindowId,
       index: state.activeTabIndex + 1,
     });
+  }
+
+  if (item.kind === KIND_CLOSED_TAB) {
+    return Object.freeze({ type: 'restoreSession', sessionId: item.sessionId });
   }
 
   if (item.kind === KIND_BOOKMARK) {
