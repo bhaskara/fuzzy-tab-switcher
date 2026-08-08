@@ -119,9 +119,10 @@ mark {
 /* Diagnostic only; see popup/timing.js. */
 .timing {
   margin: 0;
-  padding: 4px 14px;
+  padding: 6px 14px;
   border-top: 1px solid var(--border);
   color: var(--fg-dim);
   font-family: ui-monospace, monospace;
   font-size: 10px;
+  white-space: pre;
 }

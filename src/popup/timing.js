@@ -46,14 +46,50 @@ export function summary() {
 }
 
 /**
+ * Break down everything that happened before the first mark.
+ *
+ * That span covers creating the document, parsing the HTML, fetching the
+ * stylesheet, and fetching, compiling and evaluating the module graph — and
+ * they want very different fixes, so this separates them. In particular, if the
+ * resources overlap and finish early, the remaining time is fixed renderer and
+ * compile cost and bundling the modules would not help.
+ *
+ * @returns {string[]} One line per resource, plus a trailing line for whatever
+ *   time is not accounted for by any of them.
+ */
+function resourceLines() {
+  const [navigation] = performance.getEntriesByType('navigation');
+  const entries = [];
+  if (navigation) entries.push({ name: 'document', entry: navigation });
+  for (const entry of performance.getEntriesByType('resource')) {
+    entries.push({ name: entry.name.replace(/^.*\//, ''), entry });
+  }
+
+  const lines = entries.map(
+    ({ name, entry }) =>
+      `${name.padEnd(14)}${Math.round(entry.startTime).toString().padStart(4)}` +
+      ` -> ${Math.round(entry.responseEnd).toString().padStart(4)} ms`,
+  );
+
+  const lastResponse = Math.max(0, ...entries.map(({ entry }) => entry.responseEnd));
+  const firstMark = marks.length > 0 ? marks[0].at : 0;
+  lines.push(`${'compile+eval'.padEnd(14)}${Math.round(lastResponse).toString().padStart(4)}` +
+    ` -> ${Math.round(firstMark).toString().padStart(4)} ms`);
+  return lines;
+}
+
+/**
  * Show the breakdown, if enabled, and log it for the popup's devtools console.
+ *
+ * Everything is rendered into the popup itself rather than only logged, because
+ * opening devtools to read the console distorts the very numbers being read.
  *
  * @param {HTMLElement} target Element to write the summary into.
  * @returns {void}
  */
 export function report(target) {
-  const text = summary();
-  console.log(`[tab-switcher] startup: ${text}`);
+  const text = [summary(), ...resourceLines()].join('\n');
+  console.log(`[tab-switcher] startup:\n${text}`);
   if (!SHOW_TIMING) return;
   target.textContent = text;
   target.hidden = false;
