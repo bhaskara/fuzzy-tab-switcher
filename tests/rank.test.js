@@ -31,13 +31,13 @@ function rankedTitles(items, query) {
 }
 
 describe('rank with an empty query', () => {
-  it('returns everything most-recently-used first, across both sources', () => {
+  it('returns open tabs most-recently-used first, then everything else', () => {
     const items = [
       tab({ id: 1, title: 'old tab', lastAccessed: 100 }),
       bookmark({ id: 'b1', title: 'recent bookmark', dateAdded: 300 }),
       tab({ id: 2, title: 'new tab', url: 'https://a.test/', lastAccessed: 400 }),
     ];
-    expect(rankedTitles(items, '')).toEqual(['new tab', 'recent bookmark', 'old tab']);
+    expect(rankedTitles(items, '')).toEqual(['new tab', 'old tab', 'recent bookmark']);
   });
 
   it('treats an all-whitespace query as empty', () => {
@@ -94,6 +94,60 @@ describe('rank with a query', () => {
     const first = ranked(items, 'alpha').map((entry) => entry.item.key);
     const again = ranked(items.toReversed(), 'alpha').map((entry) => entry.item.key);
     expect(again).toEqual(first);
+  });
+});
+
+describe('rank tiers', () => {
+  it('puts every open tab above everything else, however much better it matches', () => {
+    const items = [
+      bookmark({ id: 'b1', title: 'alpha', url: 'https://alpha.test/' }),
+      closed({ id: 's1', title: 'alpha', url: 'https://alpha.example/' }),
+      // A far worse match, but it is open, so it wins.
+      tab({ id: 1, title: 'a-l-p-zzz-h-a', url: 'https://weak.test/' }),
+    ];
+    expect(rankedTitles(items, 'alpha')[0]).toBe('a-l-p-zzz-h-a');
+  });
+
+  it('does not separate this window from other windows — both are open', () => {
+    const items = [
+      tab({ id: 1, title: 'here', windowId: 1, lastAccessed: 100 }),
+      tab({ id: 2, title: 'over there', windowId: 9, url: 'https://b.test/', lastAccessed: 400 }),
+    ];
+    expect(rankedTitles(items, '')).toEqual(['over there', 'here']);
+  });
+
+  it('keeps bookmarks and closed tabs interleaved by recency within their tier', () => {
+    const items = [
+      bookmark({ id: 'b1', title: 'older bookmark', url: 'https://a.test/', dateAdded: 100 }),
+      closed({ id: 's1', title: 'newer closed', url: 'https://b.test/', lastModified: 300 }),
+      bookmark({ id: 'b2', title: 'newest bookmark', url: 'https://c.test/', dateAdded: 400_000 }),
+    ];
+    expect(rankedTitles(items, '')).toEqual([
+      'newest bookmark',
+      'newer closed',
+      'older bookmark',
+    ]);
+  });
+
+  it('places a source added later in the lower tier without being told to', () => {
+    const alien = {
+      kind: 'history',
+      key: 'history:1',
+      title: 'history hit',
+      url: 'https://h.test/',
+      display: 'h.test',
+      lastUsed: 9_999_999_999,
+    };
+    const items = [alien, tab({ id: 1, title: 'open', lastAccessed: 1 })];
+    expect(rankedTitles(items, '')).toEqual(['open', 'history hit']);
+  });
+
+  it('still ranks by match quality within the open tier', () => {
+    const items = [
+      tab({ id: 1, title: 'a-l-p-h-a', url: 'https://weak.test/' }),
+      tab({ id: 2, title: 'alpha', url: 'https://strong.test/' }),
+    ];
+    expect(rankedTitles(items, 'alpha')).toEqual(['alpha', 'a-l-p-h-a']);
   });
 });
 

@@ -27,10 +27,27 @@ The popup is opened by the configured shortcut and lists open tabs and bookmarks
 in a single ranked list. Typing narrows the list; arrow keys (and `Ctrl-N` /
 `Ctrl-P`) move the selection; `Enter` activates it.
 
-**Ranking.** With an empty query the list is ordered most-recently-used first,
-across both sources: tabs by `Tab.lastAccessed` and bookmarks by
-`BookmarkTreeNode.dateLastUsed` (falling back to `dateAdded`). With a non-empty
-query, fuzzy match score dominates and recency breaks ties.
+**Ranking** happens in two tiers, and the tier is absolute:
+
+1. **Open tabs**, whether in this window or another — the two are not separated
+   from each other.
+2. **Everything else**: bookmarks, recently closed tabs, and any source added
+   later, which lands here by default rather than by being listed.
+
+No item in tier 2 ever appears above one in tier 1, whatever the query. The
+reasoning is that switching to something already open is the common case, and it
+should not be displaced by things that merely look similar. The cost, accepted
+deliberately, is that a precise query exactly matching a closed tab still sits
+below open tabs matching it weakly — revisit if that becomes annoying in use.
+
+Within a tier: an empty query orders most-recently-used first — tabs by
+`Tab.lastAccessed`, bookmarks by `BookmarkTreeNode.dateLastUsed` falling back to
+`dateAdded`, closed tabs by `Session.lastModified` — and a non-empty query
+orders by fuzzy match score, with recency, then title, then key breaking ties.
+
+Note the interaction with the 50-row display cap: with more than fifty matching
+open tabs, tier 2 does not appear at all. The status line says how many results
+were held back.
 
 **Activation.**
 

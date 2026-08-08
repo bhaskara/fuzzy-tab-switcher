@@ -134,14 +134,51 @@ function scoreCandidate(query, candidate) {
 }
 
 /**
- * Order two scored items: best score first, most recently used to break ties.
+ * Which of the two ranking tiers an item belongs to, lower being higher up.
+ *
+ * Tier 0 is everything that is open right now — a tab, whether it lives in this
+ * window or another. Tier 1 is everything else: bookmarks, recently closed
+ * tabs, and any source added later, which lands here by default rather than by
+ * being listed.
+ *
+ * @param {import('./items.js').SearchItem} item
+ * @returns {number}
+ */
+function tierOf(item) {
+  return item.kind === KIND_TAB ? 0 : 1;
+}
+
+/**
+ * Order two scored items: tier first, then the ordering within a tier.
+ *
+ * The tier is absolute — it outranks the match score, so a bookmark or a closed
+ * tab never appears above an open tab however much better it matches. That is
+ * deliberate: switching to something already open is the common case, and this
+ * keeps it from being displaced by things that merely look similar. The cost is
+ * that a precise query matching a closed tab exactly still sits below open tabs
+ * matching it weakly.
  *
  * @param {RankedItem} a
  * @param {RankedItem} b
  * @returns {number}
  */
-function byScoreThenRecency(a, b) {
+function byTierThenScore(a, b) {
+  const byTier = tierOf(a.item) - tierOf(b.item);
+  if (byTier !== 0) return byTier;
   if (a.score !== b.score) return b.score - a.score;
+  return byRecencyDesc(a.item, b.item);
+}
+
+/**
+ * Order two unscored items: tier first, then most recently used.
+ *
+ * @param {RankedItem} a
+ * @param {RankedItem} b
+ * @returns {number}
+ */
+function byTierThenRecency(a, b) {
+  const byTier = tierOf(a.item) - tierOf(b.item);
+  if (byTier !== 0) return byTier;
   return byRecencyDesc(a.item, b.item);
 }
 
@@ -151,23 +188,23 @@ function byScoreThenRecency(a, b) {
  * @param {Candidate[]} index As returned by {@link buildIndex}.
  * @param {string} query The user's search string. Surrounding whitespace is
  *   ignored; an all-whitespace query counts as empty.
- * @returns {RankedItem[]} A new array. For an empty query, every candidate
- *   ordered most-recently-used first. Otherwise only matching candidates, best
+ * @returns {RankedItem[]} A new array. Open tabs come first as a block, then
+ *   everything else — see {@link tierOf}. Within a tier: for an empty query,
+ *   most-recently-used first; otherwise only matching candidates, best match
  *   first, with recency then title then key breaking ties. The order is total,
  *   so it does not depend on the order of `index` and does not shuffle between
  *   keystrokes.
  *
  * Postconditions
  * --------------
- * The result is never longer than `index`.
+ * The result is never longer than `index`. No item that is not an open tab
+ * appears before one that is, whatever the query.
  */
 export function rank(index, query) {
   const trimmed = query.trim();
 
   if (trimmed === '') {
-    return index
-      .map((candidate) => ({ item: candidate.item, score: 0 }))
-      .sort((a, b) => byRecencyDesc(a.item, b.item));
+    return index.map((candidate) => ({ item: candidate.item, score: 0 })).sort(byTierThenRecency);
   }
 
   const prepared = prepareQuery(trimmed);
@@ -176,5 +213,5 @@ export function rank(index, query) {
     const itemScore = scoreCandidate(prepared, candidate);
     if (itemScore !== null) ranked.push({ item: candidate.item, score: itemScore });
   }
-  return ranked.sort(byScoreThenRecency);
+  return ranked.sort(byTierThenScore);
 }
