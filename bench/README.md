@@ -34,7 +34,10 @@ Current figures on a 2025 laptop, per keystroke:
 | 5,300 items | ~27 ms | ~3 ms |
 | 20,500 items | ~103 ms | ~14 ms |
 
-`buildIndex` is the remaining lever if a corpus that large ever needs to feel
-instant: it runs once, after the popup's tabs and bookmarks have been read, and
-the empty-query view does not actually need the prepared text it spends its time
-on, so it could be deferred until the first keystroke.
+`buildIndex` looked like the remaining lever, on the reasoning that it runs once
+before the first paint and the empty-query view does not need the prepared text
+it spends its time on. Measuring the popup's actual startup showed otherwise: at
+a real corpus, reading the sources and building the index come to about 13ms of
+an 86ms tail, and nearly all the rest goes before the first line of JavaScript
+runs. See [../DESIGN.md](../DESIGN.md) §6. Deferring `buildIndex` would be worth
+a few milliseconds and is not worth the complexity.

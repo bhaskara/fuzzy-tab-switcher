@@ -160,7 +160,53 @@ Ranking now costs ~3ms per keystroke at 5,000 items, so the popup re-ranks
 synchronously on every keystroke and does not debounce: debouncing at that cost
 would only add latency.
 
-## 6. Milestones
+## 6. Popup open latency
+
+Opening the popup felt like a couple of hundred milliseconds. Only part of that
+is ours: Chrome creates the popup's window and renderer before a single line of
+the extension runs, and that phase is neither measurable from inside the popup
+nor influenceable from it. `performance.now()` starts at the popup document, so
+everything below is the tail.
+
+`popup/timing.js` marks the steps and can display them in the popup; leave
+`SHOW_TIMING` off in normal use, since the marks themselves cost nothing.
+
+Measured tail, in milliseconds:
+
+| Change | to first module | read+index | render+paint | total |
+| --- | --- | --- | --- | --- |
+| baseline | 61-65 | 13 | 24-28 | 100-105 |
+| `modulepreload` for all nine modules | 54 | 14 | 19 | 88 |
+| ...and styles inlined into the HTML | 46 | 14 | 26 | 86 |
+
+Two things this overturned. Reading the bookmark tree and building the index —
+the costs the previous round of optimisation had been aimed at, and the ones
+[bench/README.md](bench/README.md) flagged as the next lever — together account
+for about 13ms and are not worth touching. Nearly all of the tail is spent
+before the first line of JavaScript runs.
+
+**Kept:** `modulepreload` links in `popup/index.html`, worth ~9ms. Without them
+the browser cannot discover a module until it has fetched and parsed whichever
+module imports it, so the graph loads as a waterfall. They cost nothing and need
+no build step. Keep them in step with the imports in `popup/main.js`.
+
+**Reverted:** inlining the stylesheet. It moved 8ms off the pre-script span and
+gave 6ms back at paint, for a net ~2ms, which does not justify losing
+`popup.css` as a file.
+
+**Not attempted:** bundling the modules into one file. About 36ms remains in
+fetching, compiling and evaluating nine files, and bundling is the only lever
+left on it — but it would mean the build step §5 deliberately avoids, trading
+the "save the file, press reload" cycle for perhaps 25ms on top of a delay whose
+larger half is Chrome's and untouchable. Revisit only if the popup starts
+feeling slow in use rather than in a measurement.
+
+Two methods that do *not* work here, recorded so they are not tried again:
+Chrome emits no ResourceTiming entries for `chrome-extension://` subresources,
+so individual module fetches cannot be timed; and MV3 forbids inline scripts on
+extension pages, so an inline `<script>` cannot be used to timestamp anything.
+
+## 7. Milestones
 
 Each milestone ends in a commit.
 

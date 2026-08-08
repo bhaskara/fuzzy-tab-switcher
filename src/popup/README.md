@@ -6,9 +6,10 @@ bookmarks.
 
 | File | Contents |
 | --- | --- |
-| `index.html` | Markup: the query input, the result list, and a status line. |
+| `index.html` | Markup: the query input, the result list, and a status line. Also the `modulepreload` links — **keep those in step with the imports in `main.js`**, or the module graph goes back to loading as a waterfall. |
 | `popup.css` | Styling, including the light/dark palette. Sets the popup width. |
 | `main.js` | Wiring only — read via `adapters/`, rank via `core/`, render, and on activation hand the chosen action back to `adapters/`. Logic that could live in `core/` should. |
+| `timing.js` | Startup marks, for diagnosing how long the popup takes to open. Off by default; set `SHOW_TIMING` to display the breakdown in the popup. See [../../DESIGN.md](../../DESIGN.md) §6 for what has already been measured and ruled out. |
 
 | Key | Does |
 | --- | --- |

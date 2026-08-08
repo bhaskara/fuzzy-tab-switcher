@@ -12,7 +12,7 @@
  * Whether to show the breakdown in the popup. Leave off in normal use; the
  * marks themselves cost nothing, so only the display is conditional.
  */
-const SHOW_TIMING = true;
+const SHOW_TIMING = false;
 
 /** Marks recorded so far, in the order they were taken. */
 const marks = [];
@@ -64,9 +64,9 @@ function resourceLines() {
     ` -> ${Math.round(to).toString().padStart(4)} ms`;
 
   // Chrome emits no ResourceTiming entries for chrome-extension:// subresources
-  // and forbids inline scripts on extension pages, so the module graph cannot
-  // be timed from within: all that can be said is when the document finished
-  // and when the first module ran.
+  // and forbids inline scripts on extension pages, so the stylesheet and the
+  // module graph cannot be timed separately from within: all that can be said
+  // is when the document finished and when the first module ran.
   const [navigation] = performance.getEntriesByType('navigation');
   if (navigation) lines.push(at(navigation.startTime, navigation.responseEnd, 'document'));
   lines.push(at(navigation?.responseEnd ?? 0, marks.length > 0 ? marks[0].at : 0, 'modules'));
