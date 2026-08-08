@@ -38,6 +38,10 @@ export async function execute(action) {
       // where it lands, so the reopened tab is handed back for the caller to
       // plan against rather than acted on here.
       const session = await chrome.sessions.restore(action.sessionId);
+      // Diagnostic: the API reference does not say what shape comes back when
+      // Chrome has to recreate a window to hold the tab, and a session with no
+      // `tab` makes the caller skip its follow-up silently.
+      console.log('[tab-switcher] sessions.restore returned', JSON.stringify(session));
       return session?.tab ?? null;
     }
 

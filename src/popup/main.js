@@ -265,11 +265,20 @@ async function activate(intent) {
     // lands in, and that is not knowable until it has. Planning a second action
     // against the reopened tab is what makes a restored tab behave like any
     // other tab under every intent.
+    if (restored === null && action.type === 'restoreSession') {
+      // The tab is back, but Chrome told us nothing we can place it with, so
+      // it stayed wherever Chrome put it. Say so rather than closing as though
+      // the requested placement had happened.
+      setStatus('Restored, but Chrome reported no tab to place — see popup console');
+      return;
+    }
     if (restored !== null) {
       // The follow-up can refuse just as the first plan can — restoring a
       // closed tab with no other window to send it to, for one — and exec has
       // no case for that.
       const followUp = plan(tabToItem(restored), intent, browserState);
+      console.log('[tab-switcher] restored tab', JSON.stringify(restored));
+      console.log('[tab-switcher] follow-up action', JSON.stringify(followUp));
       if (followUp.type === 'reportProblem') {
         setStatus(followUp.message);
         return;
