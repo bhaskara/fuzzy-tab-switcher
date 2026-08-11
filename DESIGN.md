@@ -1,7 +1,7 @@
 # Design
 
-Design and implementation plan for the `switch-to` Chrome extension described in
-[README.md](README.md). This document records *how* the spec is realized, which
+Design and implementation plan for the `switch-to` Chrome extension specified in
+[dev.md](dev.md). This document records *how* the spec is realized, which
 Chrome APIs it rests on, and what is deliberately deferred.
 
 ## 1. Feasibility summary
